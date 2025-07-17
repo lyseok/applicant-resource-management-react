@@ -24,15 +24,19 @@ import {
   Plus,
   Bell,
 } from 'lucide-react';
-import { createTask, updateTask } from '@/store/slices/taskSlice';
+import {
+  createTask,
+  updateTask,
+  closeTaskPanel,
+} from '@/store/slices/taskSlice';
 
-export default function TaskPanel({ isOpen, onClose, task }) {
+export default function TaskPanel({ isOpen, task }) {
   const dispatch = useDispatch();
   const { tasks, loading } = useSelector((state) => state.tasks);
   const { currentProject } = useSelector((state) => state.project);
 
   const [taskName, setTaskName] = useState('');
-  const [userId, setUserId] = useState('USER001');
+  const [userId, setUserId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [priorityCode, setPriorityCode] = useState('MEDIUM');
@@ -41,12 +45,13 @@ export default function TaskPanel({ isOpen, onClose, task }) {
   const [comment, setComment] = useState('');
   const [progressRate, setProgressRate] = useState('0');
   const [upperTaskNo, setUpperTaskNo] = useState('');
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   // task가 변경될 때마다 폼 데이터 업데이트
   useEffect(() => {
     if (task) {
       setTaskName(task.taskName || '');
-      setUserId(task.userId || 'USER001');
+      setUserId(task.userId || '');
       setDueDate(task.dueDate || '');
       setStartDate(task.startDate || '');
       setPriorityCode(task.priorityCode || 'MEDIUM');
@@ -58,9 +63,11 @@ export default function TaskPanel({ isOpen, onClose, task }) {
   }, [task]);
 
   const handleSave = async () => {
+    if (!taskName.trim()) return;
+
     const taskData = {
       taskName,
-      prjNo: currentProject.prjNo,
+      prjNo: currentProject?.prjNo || 'PRJ001',
       userId,
       sectNo: 'SECT001',
       creatorId: 'USER001',
@@ -78,18 +85,24 @@ export default function TaskPanel({ isOpen, onClose, task }) {
     try {
       if (task?.taskNo) {
         // 기존 작업 업데이트
-        await dispatch(
+        dispatch(
           updateTask({
             id: task.taskNo,
             taskData: { ...taskData, taskNo: task.taskNo },
           })
-        ).unwrap();
+        );
       } else {
         // 새 작업 생성
         const newTaskNo = `TASK${String(tasks.length + 1).padStart(3, '0')}`;
-        await dispatch(createTask({ ...taskData, taskNo: newTaskNo })).unwrap();
+        dispatch(createTask({ ...taskData, taskNo: newTaskNo }));
       }
-      onClose();
+
+      // 성공 메시지 표시
+      setShowSuccessMessage(true);
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+        dispatch(closeTaskPanel());
+      }, 1500);
     } catch (error) {
       console.error('작업 저장 실패:', error);
     }
@@ -102,18 +115,38 @@ export default function TaskPanel({ isOpen, onClose, task }) {
     setTaskStatus(newStatus);
   };
 
+  const handleClose = () => {
+    dispatch(closeTaskPanel());
+  };
+
   const availableTasks = tasks.filter((t) => t.taskNo !== task?.taskNo);
+  const projectMembers = currentProject?.members || [];
+
+  // 담당자 정보 가져오기
+  const getAssigneeInfo = (userId) => {
+    const member = projectMembers.find((m) => m.userId === userId);
+    return member || { userName: '미지정', userEmail: '' };
+  };
 
   if (!isOpen) return null;
 
   const isNewTask = !task?.taskNo;
+  const assigneeInfo = userId ? getAssigneeInfo(userId) : null;
 
   return (
     <>
+      {/* 성공 메시지 */}
+      {showSuccessMessage && (
+        <div className="fixed top-4 right-4 z-[60] bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2">
+          <Check className="w-5 h-5" />
+          <span className="font-medium">저장이 완료되었습니다!</span>
+        </div>
+      )}
+
       {/* 오버레이 */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* 사이드 패널 */}
@@ -181,7 +214,7 @@ export default function TaskPanel({ isOpen, onClose, task }) {
                 variant="ghost"
                 size="sm"
                 className="p-2 hover:bg-gray-100 rounded-lg"
-                onClick={onClose}
+                onClick={handleClose}
               >
                 <X className="w-4 h-4 text-gray-600" />
               </Button>
@@ -205,17 +238,46 @@ export default function TaskPanel({ isOpen, onClose, task }) {
             />
           </div>
 
-          {/* 담당자 */}
+          {/* 담당자 선택 */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">담당자</label>
-            <div className="flex items-center space-x-3">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-yellow-500 text-white text-sm font-medium">
-                  미문
-                </AvatarFallback>
-              </Avatar>
-              <span className="font-medium">미문</span>
-            </div>
+            <Select value={userId} onValueChange={setUserId}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="담당자를 선택하세요">
+                  {assigneeInfo && (
+                    <div className="flex items-center space-x-2">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
+                          {assigneeInfo.userName?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm">{assigneeInfo.userName}</span>
+                    </div>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">담당자 미지정</SelectItem>
+                {projectMembers.map((member) => (
+                  <SelectItem key={member.userId} value={member.userId}>
+                    <div className="flex items-center space-x-2">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
+                          {member.userName?.charAt(0) ||
+                            member.userEmail?.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium">{member.userName}</div>
+                        <div className="text-xs text-gray-500">
+                          {member.userEmail}
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* 시작일과 마감일 */}
@@ -261,7 +323,7 @@ export default function TaskPanel({ isOpen, onClose, task }) {
               <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                 <span className="text-sm font-medium">
-                  {currentProject.name}
+                  {currentProject?.projectName}
                 </span>
                 <Select value={taskStatus} onValueChange={setTaskStatus}>
                   <SelectTrigger className="w-auto border-none shadow-none p-0 h-auto">
@@ -328,14 +390,17 @@ export default function TaskPanel({ isOpen, onClose, task }) {
                   <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                   <span className="text-sm text-gray-700">진척도</span>
                 </div>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={progressRate}
-                  onChange={(e) => setProgressRate(e.target.value)}
-                  className="w-20 text-right"
-                />
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={progressRate}
+                    onChange={(e) => setProgressRate(e.target.value)}
+                    className="w-16 text-right text-sm"
+                  />
+                  <span className="text-sm text-gray-500">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -387,11 +452,13 @@ export default function TaskPanel({ isOpen, onClose, task }) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">작업 참여자</span>
-              <Avatar className="w-6 h-6">
-                <AvatarFallback className="bg-yellow-500 text-white text-xs font-medium">
-                  미
-                </AvatarFallback>
-              </Avatar>
+              {assigneeInfo && (
+                <Avatar className="w-6 h-6">
+                  <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
+                    {assigneeInfo.userName?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -412,14 +479,14 @@ export default function TaskPanel({ isOpen, onClose, task }) {
           <div className="flex space-x-2">
             <Button
               variant="outline"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 bg-transparent"
             >
               취소
             </Button>
             <Button
               onClick={handleSave}
-              disabled={loading}
+              disabled={loading || !taskName.trim()}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
             >
               {loading
