@@ -10,19 +10,20 @@ import {
   ChevronLeft,
   ChevronRightIcon,
 } from 'lucide-react';
-import { updateTask } from '@/store/slices/taskSlice';
+import { updateTask, openTaskPanel } from '@/store/slices/taskSlice';
 import TaskPanel from './TaskPanel';
 
 export default function GanttChart() {
-  const { tasks } = useSelector((state) => state.tasks);
+  const { tasks, isTaskPanelOpen, selectedTask } = useSelector(
+    (state) => state.tasks
+  );
+  const { currentProject } = useSelector((state) => state.project);
   const dispatch = useDispatch();
   const [expandedSections, setExpandedSections] = useState([
     'TODO',
     'IN_PROGRESS',
     'COMPLETED',
   ]);
-  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date(2024, 6)); // July 2024
 
@@ -98,12 +99,13 @@ export default function GanttChart() {
   const getTaskPosition = (task) => {
     if (!task.startDate || !task.dueDate) return { left: '0%', width: '0%' };
 
-    const startDate = new Date(
+    const taskStartDate = new Date(
       task.startDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
     );
-    const endDate = new Date(
+    const taskEndDate = new Date(
       task.dueDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
     );
+
     const monthStart = new Date(
       currentMonth.getFullYear(),
       currentMonth.getMonth(),
@@ -115,20 +117,36 @@ export default function GanttChart() {
       0
     );
 
-    const totalDays = monthEnd.getDate();
-    const taskStartDay = Math.max(1, startDate.getDate());
-    const taskEndDay = Math.min(totalDays, endDate.getDate());
-    const taskDuration = taskEndDay - taskStartDay + 1;
+    // Calculate the effective start and end dates within the current month's view
+    const effectiveStartDate = new Date(
+      Math.max(taskStartDate.getTime(), monthStart.getTime())
+    );
+    const effectiveEndDate = new Date(
+      Math.min(taskEndDate.getTime(), monthEnd.getTime())
+    );
 
-    const left = ((taskStartDay - 1) / totalDays) * 100;
-    const width = (taskDuration / totalDays) * 100;
+    // If the task doesn't overlap with the current month, return zero width
+    if (effectiveStartDate > effectiveEndDate) {
+      return { left: '0%', width: '0%' };
+    }
+
+    const totalDaysInMonth = monthEnd.getDate(); // Number of days in the current month
+    const daysFromMonthStartToEffectiveStart =
+      (effectiveStartDate.getTime() - monthStart.getTime()) /
+      (1000 * 60 * 60 * 24);
+    const effectiveDurationDays =
+      (effectiveEndDate.getTime() - effectiveStartDate.getTime()) /
+        (1000 * 60 * 60 * 24) +
+      1;
+
+    const left = (daysFromMonthStartToEffectiveStart / totalDaysInMonth) * 100;
+    const width = (effectiveDurationDays / totalDaysInMonth) * 100;
 
     return { left: `${left}%`, width: `${width}%` };
   };
 
   const handleTaskClick = (task) => {
-    setSelectedTask(task);
-    setIsTaskPanelOpen(true);
+    dispatch(openTaskPanel(task));
   };
 
   const handleTaskDragStart = (e, task) => {
@@ -162,10 +180,10 @@ export default function GanttChart() {
   };
 
   const handleAddTask = (status) => {
-    setSelectedTask({
+    const newTask = {
       taskNo: null,
       taskName: '',
-      userId: 'USER001',
+      userId: '',
       sectNo: 'SECT001',
       creatorId: 'USER001',
       dueDate: '',
@@ -175,8 +193,15 @@ export default function GanttChart() {
       progressRate: '0',
       detailContent: '',
       upperTaskNo: null,
-    });
-    setIsTaskPanelOpen(true);
+      prjNo: currentProject?.prjNo || 'PRJ001',
+    };
+    dispatch(openTaskPanel(newTask));
+  };
+
+  const getAssigneeInfo = (userId) => {
+    if (!userId) return { userName: '미지정', userEmail: '' };
+    const member = currentProject?.members?.find((m) => m.userId === userId);
+    return member || { userName: '미지정', userEmail: '' };
   };
 
   const weeks = getWeeksInMonth(currentMonth);
@@ -258,7 +283,7 @@ export default function GanttChart() {
               <div key={status} className="border-b border-gray-200">
                 <Button
                   variant="ghost"
-                  className="w-full justify-start p-4 hover:bg-gray-50"
+                  className="w-full justify-start p-4 hover:bg-gray-50 h-12"
                   onClick={() => toggleSection(status)}
                 >
                   {expandedSections.includes(status) ? (
@@ -274,43 +299,46 @@ export default function GanttChart() {
 
                 {expandedSections.includes(status) && (
                   <div className="pb-2">
-                    {sectionTasks.map((task) => (
-                      <div
-                        key={task.taskNo}
-                        className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
-                        onClick={() => handleTaskClick(task)}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <Avatar className="w-6 h-6">
-                            <AvatarFallback className="bg-yellow-500 text-white text-xs">
-                              미문
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">
-                              {task.taskName}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {task.startDate &&
-                                task.dueDate &&
-                                `${task.startDate.slice(
-                                  4,
-                                  6
-                                )}/${task.startDate.slice(
-                                  6,
-                                  8
-                                )} ~ ${task.dueDate.slice(
-                                  4,
-                                  6
-                                )}/${task.dueDate.slice(6, 8)}`}
+                    {sectionTasks.map((task) => {
+                      const assigneeInfo = getAssigneeInfo(task.userId);
+                      return (
+                        <div
+                          key={task.taskNo}
+                          className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 h-10 flex items-center"
+                          onClick={() => handleTaskClick(task)}
+                        >
+                          <div className="flex items-center space-x-2 w-full">
+                            <Avatar className="w-6 h-6">
+                              <AvatarFallback className="bg-yellow-500 text-white text-xs">
+                                {assigneeInfo.userName?.charAt(0) || '미'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">
+                                {task.taskName}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {task.startDate &&
+                                  task.dueDate &&
+                                  `${task.startDate.slice(
+                                    4,
+                                    6
+                                  )}/${task.startDate.slice(
+                                    6,
+                                    8
+                                  )} ~ ${task.dueDate.slice(
+                                    4,
+                                    6
+                                  )}/${task.dueDate.slice(6, 8)}`}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <Button
                       variant="ghost"
-                      className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50"
+                      className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50 h-12"
                       onClick={() => handleAddTask(status)}
                     >
                       <Plus className="w-4 h-4 mr-2" />
@@ -324,7 +352,7 @@ export default function GanttChart() {
 
           <Button
             variant="ghost"
-            className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50"
+            className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50 h-12"
             onClick={() => handleAddTask('TODO')}
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -348,39 +376,71 @@ export default function GanttChart() {
                 const sectionTasks = getTasksByStatus(status);
                 if (!expandedSections.includes(status)) return null;
 
+                const monthStart = new Date(
+                  currentMonth.getFullYear(),
+                  currentMonth.getMonth(),
+                  1
+                );
+                const monthEnd = new Date(
+                  currentMonth.getFullYear(),
+                  currentMonth.getMonth() + 1,
+                  0
+                );
+
                 return (
                   <div key={status} className="relative">
                     {/* 섹션 헤더 공간 */}
                     <div className="h-12 border-b border-gray-200"></div>
 
                     {/* 작업들 */}
-                    {sectionTasks.map((task, taskIndex) => {
-                      const position = getTaskPosition(task);
-                      return (
-                        <div
-                          key={task.taskNo}
-                          className="relative h-10 border-b border-gray-100"
-                        >
+                    {sectionTasks
+                      .filter((task) => {
+                        if (!task.startDate || !task.dueDate) return false;
+                        const taskStartDate = new Date(
+                          task.startDate.replace(
+                            /(\d{4})(\d{2})(\d{2})/,
+                            '$1-$2-$3'
+                          )
+                        );
+                        const taskEndDate = new Date(
+                          task.dueDate.replace(
+                            /(\d{4})(\d{2})(\d{2})/,
+                            '$1-$2-$3'
+                          )
+                        );
+                        return (
+                          taskStartDate <= monthEnd && taskEndDate >= monthStart
+                        );
+                      })
+                      .map((task, taskIndex) => {
+                        const position = getTaskPosition(task);
+                        return (
                           <div
-                            className={`absolute top-1 h-8 rounded ${getPriorityColor(
-                              task.priorityCode
-                            )} opacity-80 cursor-pointer hover:opacity-100 transition-opacity flex items-center px-2`}
-                            style={{
-                              left: position.left,
-                              width: position.width,
-                              minWidth: '60px',
-                            }}
-                            draggable
-                            onDragStart={(e) => handleTaskDragStart(e, task)}
-                            onClick={() => handleTaskClick(task)}
+                            key={task.taskNo}
+                            className="relative h-10 border-b border-gray-100 flex items-center"
                           >
-                            <span className="text-white text-xs font-medium truncate">
-                              {task.taskName}
-                            </span>
+                            <div
+                              className={`absolute h-6 rounded ${getPriorityColor(
+                                task.priorityCode
+                              )} opacity-80 cursor-pointer hover:opacity-100 transition-opacity flex items-center px-2`}
+                              style={{
+                                left: position.left,
+                                width: position.width,
+                                minWidth: '60px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                              }}
+                              draggable
+                              onDragStart={(e) => handleTaskDragStart(e, task)}
+                              onClick={() => handleTaskClick(task)}
+                            >
+                              <span className="text-white text-xs font-medium truncate">
+                                {task.taskName}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
 
                     {/* 작업 추가 공간 */}
                     <div className="h-12 border-b border-gray-200"></div>
@@ -396,14 +456,7 @@ export default function GanttChart() {
       </div>
 
       {/* 작업 패널 */}
-      <TaskPanel
-        isOpen={isTaskPanelOpen}
-        onClose={() => {
-          setIsTaskPanelOpen(false);
-          setSelectedTask(null);
-        }}
-        task={selectedTask}
-      />
+      <TaskPanel isOpen={isTaskPanelOpen} task={selectedTask} />
     </div>
   );
 }
