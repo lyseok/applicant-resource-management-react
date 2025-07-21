@@ -25,8 +25,8 @@ import {
   Bell,
 } from 'lucide-react';
 import {
-  createTask,
-  updateTask,
+  createTaskAsync,
+  updateTaskAsync,
   closeTaskPanel,
 } from '@/store/slices/taskSlice';
 
@@ -39,13 +39,18 @@ export default function TaskPanel({ isOpen, task }) {
   const [userId, setUserId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [priorityCode, setPriorityCode] = useState('MEDIUM');
-  const [taskStatus, setTaskStatus] = useState('TODO');
+  const [priorityCode, setPriorityCode] = useState('PCOD002');
+  const [taskStatus, setTaskStatus] = useState('PEND-001');
   const [detailContent, setDetailContent] = useState('');
-  const [comment, setComment] = useState('');
   const [progressRate, setProgressRate] = useState('0');
   const [upperTaskNo, setUpperTaskNo] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
+  // 활성 멤버만 필터링 (deleteDate가 null인 멤버)
+  const activeMembers =
+    currentProject?.prjMemList?.filter(
+      (member) => member.deleteDate === null
+    ) || [];
 
   // task가 변경될 때마다 폼 데이터 업데이트
   useEffect(() => {
@@ -54,8 +59,8 @@ export default function TaskPanel({ isOpen, task }) {
       setUserId(task.userId || '');
       setDueDate(task.dueDate || '');
       setStartDate(task.startDate || '');
-      setPriorityCode(task.priorityCode || 'MEDIUM');
-      setTaskStatus(task.taskStatus || 'TODO');
+      setPriorityCode(task.priorityCode || 'PCOD002');
+      setTaskStatus(task.taskStatus || 'PEND-001');
       setDetailContent(task.detailContent || '');
       setProgressRate(task.progressRate || '0');
       setUpperTaskNo(task.upperTaskNo || '');
@@ -67,10 +72,9 @@ export default function TaskPanel({ isOpen, task }) {
 
     const taskData = {
       taskName,
-      prjNo: currentProject?.prjNo || 'PRJ001',
+      prjNo: currentProject?.prjNo,
       userId,
-      sectNo: 'SECT001',
-      creatorId: 'USER001',
+      creatorId,
       dueDate,
       startDate,
       priorityCode,
@@ -78,23 +82,20 @@ export default function TaskPanel({ isOpen, task }) {
       detailContent,
       progressRate,
       upperTaskNo: upperTaskNo || null,
-      deleteDate: null,
-      deleteUserId: null,
     };
 
     try {
       if (task?.taskNo) {
         // 기존 작업 업데이트
-        dispatch(
-          updateTask({
-            id: task.taskNo,
+        await dispatch(
+          updateTaskAsync({
+            taskId: task.taskNo,
             taskData: { ...taskData, taskNo: task.taskNo },
           })
-        );
+        ).unwrap();
       } else {
         // 새 작업 생성
-        const newTaskNo = `TASK${String(tasks.length + 1).padStart(3, '0')}`;
-        dispatch(createTask({ ...taskData, taskNo: newTaskNo }));
+        await dispatch(createTaskAsync(taskData)).unwrap();
       }
 
       // 성공 메시지 표시
@@ -110,7 +111,7 @@ export default function TaskPanel({ isOpen, task }) {
 
   const handleMarkComplete = () => {
     const newProgressRate = progressRate === '100' ? '0' : '100';
-    const newStatus = newProgressRate === '100' ? 'COMPLETED' : 'TODO';
+    const newStatus = newProgressRate === '100' ? 'PEND-003' : 'PEND-001';
     setProgressRate(newProgressRate);
     setTaskStatus(newStatus);
   };
@@ -120,11 +121,21 @@ export default function TaskPanel({ isOpen, task }) {
   };
 
   const availableTasks = tasks.filter((t) => t.taskNo !== task?.taskNo);
-  const projectMembers = currentProject?.members || [];
 
   // 담당자 정보 가져오기
   const getAssigneeInfo = (userId) => {
-    const member = projectMembers.find((m) => m.userId === userId);
+    if (!userId) return null;
+
+    // API 응답에서 prjMem 객체 사용
+    if (task?.prjMem && task.prjMem.userName) {
+      return {
+        userName: task.prjMem.userName,
+        userEmail: task.prjMem.userEmail || '',
+      };
+    }
+
+    // 활성 멤버에서 찾기
+    const member = activeMembers.find((m) => m.userId === userId);
     return member || { userName: '미지정', userEmail: '' };
   };
 
@@ -257,20 +268,19 @@ export default function TaskPanel({ isOpen, task }) {
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="unassigned">담당자 미지정</SelectItem>
-                {projectMembers.map((member) => (
+                <SelectItem value="none">담당자 미지정</SelectItem>
+                {activeMembers.map((member) => (
                   <SelectItem key={member.userId} value={member.userId}>
                     <div className="flex items-center space-x-2">
                       <Avatar className="w-6 h-6">
                         <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
-                          {member.userName?.charAt(0) ||
-                            member.userEmail?.charAt(0)}
+                          {member.userName?.charAt(0)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="font-medium">{member.userName}</div>
                         <div className="text-xs text-gray-500">
-                          {member.userEmail}
+                          {member.userPosition || '직책 없음'}
                         </div>
                       </div>
                     </div>
@@ -331,9 +341,9 @@ export default function TaskPanel({ isOpen, task }) {
                     <ChevronDown className="w-4 h-4 ml-1" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="TODO">할 일</SelectItem>
-                    <SelectItem value="IN_PROGRESS">진행 중</SelectItem>
-                    <SelectItem value="COMPLETED">완료</SelectItem>
+                    <SelectItem value="PEND-001">할 일</SelectItem>
+                    <SelectItem value="PEND-002">진행 중</SelectItem>
+                    <SelectItem value="PEND-003">완료</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -379,9 +389,9 @@ export default function TaskPanel({ isOpen, task }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="LOW">낮음</SelectItem>
-                    <SelectItem value="MEDIUM">중간</SelectItem>
-                    <SelectItem value="HIGH">높음</SelectItem>
+                    <SelectItem value="PCOD003">낮음</SelectItem>
+                    <SelectItem value="PCOD002">중간</SelectItem>
+                    <SelectItem value="PCOD001">높음</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -425,25 +435,6 @@ export default function TaskPanel({ isOpen, task }) {
               <Plus className="w-4 h-4 mr-2" />
               하위 작업 추가
             </Button>
-          </div>
-
-          {/* 댓글 입력 */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-3">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-yellow-500 text-white text-sm font-medium">
-                  미
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="댓글 추가"
-                  className="min-h-16 resize-none border-gray-200 focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
           </div>
         </div>
 

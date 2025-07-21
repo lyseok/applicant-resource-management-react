@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +25,21 @@ export default function GanttChart() {
     'COMPLETED',
   ]);
   const [draggedTask, setDraggedTask] = useState(null);
-  const [currentMonth, setCurrentMonth] = useState(new Date(2024, 6)); // July 2024
+  // 현재 날짜를 기준으로 초기화
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const chartRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(0);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (chartRef.current) {
+        setChartWidth(chartRef.current.offsetWidth);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const toggleSection = (section) => {
     setExpandedSections((prev) =>
@@ -193,6 +207,7 @@ export default function GanttChart() {
       progressRate: '0',
       detailContent: '',
       upperTaskNo: null,
+      predecessorTaskNo: null, // Default for new task
       prjNo: currentProject?.prjNo || 'PRJ001',
     };
     dispatch(openTaskPanel(newTask));
@@ -215,7 +230,7 @@ export default function GanttChart() {
             <Button
               variant="outline"
               size="sm"
-              className="border-gray-300 hover:bg-gray-50 font-medium rounded-lg bg-transparent"
+              className="border-gray-300 hover:bg-gray-50 font-medium rounded-lg bg-transparent h-12" // Ensure consistent height
               onClick={() => handleAddTask('TODO')}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -277,6 +292,9 @@ export default function GanttChart() {
       <div className="flex">
         {/* 왼쪽 작업 목록 */}
         <div className="w-64 bg-white border-r border-gray-200 flex-shrink-0">
+          {/* Placeholder for the initial padding/header space */}
+          <div className="h-12 border-b border-gray-200"></div>
+
           {['TODO', 'IN_PROGRESS', 'COMPLETED'].map((status) => {
             const sectionTasks = getTasksByStatus(status);
             return (
@@ -338,7 +356,7 @@ export default function GanttChart() {
                     })}
                     <Button
                       variant="ghost"
-                      className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50 h-12"
+                      className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50 h-10 flex items-center"
                       onClick={() => handleAddTask(status)}
                     >
                       <Plus className="w-4 h-4 mr-2" />
@@ -361,7 +379,10 @@ export default function GanttChart() {
         </div>
 
         {/* 오른쪽 간트 차트 */}
-        <div className="flex-1 bg-white overflow-x-auto">
+        <div
+          ref={chartRef}
+          className="flex-1 bg-white overflow-x-auto relative"
+        >
           <div className="relative min-w-full h-full">
             {/* 그리드 배경 */}
             <div className="absolute inset-0 grid grid-cols-4 gap-1 opacity-20">
@@ -370,80 +391,88 @@ export default function GanttChart() {
               ))}
             </div>
 
+            {/* Placeholder for the initial padding/header space */}
+            <div className="h-12 border-b border-gray-200"></div>
+
             {/* 작업 바들 */}
             {['TODO', 'IN_PROGRESS', 'COMPLETED'].map(
               (status, sectionIndex) => {
                 const sectionTasks = getTasksByStatus(status);
-                if (!expandedSections.includes(status)) return null;
-
-                const monthStart = new Date(
-                  currentMonth.getFullYear(),
-                  currentMonth.getMonth(),
-                  1
-                );
-                const monthEnd = new Date(
-                  currentMonth.getFullYear(),
-                  currentMonth.getMonth() + 1,
-                  0
-                );
 
                 return (
                   <div key={status} className="relative">
                     {/* 섹션 헤더 공간 */}
                     <div className="h-12 border-b border-gray-200"></div>
 
-                    {/* 작업들 */}
-                    {sectionTasks
-                      .filter((task) => {
-                        if (!task.startDate || !task.dueDate) return false;
-                        const taskStartDate = new Date(
-                          task.startDate.replace(
-                            /(\d{4})(\d{2})(\d{2})/,
-                            '$1-$2-$3'
-                          )
-                        );
-                        const taskEndDate = new Date(
-                          task.dueDate.replace(
-                            /(\d{4})(\d{2})(\d{2})/,
-                            '$1-$2-$3'
-                          )
-                        );
-                        return (
-                          taskStartDate <= monthEnd && taskEndDate >= monthStart
-                        );
-                      })
-                      .map((task, taskIndex) => {
-                        const position = getTaskPosition(task);
-                        return (
-                          <div
-                            key={task.taskNo}
-                            className="relative h-10 border-b border-gray-100 flex items-center"
-                          >
-                            <div
-                              className={`absolute h-6 rounded ${getPriorityColor(
-                                task.priorityCode
-                              )} opacity-80 cursor-pointer hover:opacity-100 transition-opacity flex items-center px-2`}
-                              style={{
-                                left: position.left,
-                                width: position.width,
-                                minWidth: '60px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                              }}
-                              draggable
-                              onDragStart={(e) => handleTaskDragStart(e, task)}
-                              onClick={() => handleTaskClick(task)}
-                            >
-                              <span className="text-white text-xs font-medium truncate">
-                                {task.taskName}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    {expandedSections.includes(status) && (
+                      <>
+                        {/* 작업들 */}
+                        {sectionTasks
+                          .filter((task) => {
+                            if (!task.startDate || !task.dueDate) return false;
+                            const taskStartDate = new Date(
+                              task.startDate.replace(
+                                /(\d{4})(\d{2})(\d{2})/,
+                                '$1-$2-$3'
+                              )
+                            );
+                            const taskEndDate = new Date(
+                              task.dueDate.replace(
+                                /(\d{4})(\d{2})(\d{2})/,
+                                '$1-$2-$3'
+                              )
+                            );
+                            const monthStart = new Date(
+                              currentMonth.getFullYear(),
+                              currentMonth.getMonth(),
+                              1
+                            );
+                            const monthEnd = new Date(
+                              currentMonth.getFullYear(),
+                              currentMonth.getMonth() + 1,
+                              0
+                            );
+                            return (
+                              taskStartDate <= monthEnd &&
+                              taskEndDate >= monthStart
+                            );
+                          })
+                          .map((task, taskIndex) => {
+                            const position = getTaskPosition(task);
+                            return (
+                              <div
+                                key={task.taskNo}
+                                className="relative h-10 border-b border-gray-100 flex items-center"
+                              >
+                                <div
+                                  className={`absolute h-6 rounded ${getPriorityColor(
+                                    task.priorityCode
+                                  )} opacity-80 cursor-pointer hover:opacity-100 transition-opacity flex items-center px-2`}
+                                  style={{
+                                    left: position.left,
+                                    width: position.width,
+                                    minWidth: '60px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                  }}
+                                  draggable
+                                  onDragStart={(e) =>
+                                    handleTaskDragStart(e, task)
+                                  }
+                                  onClick={() => handleTaskClick(task)}
+                                >
+                                  <span className="text-white text-xs font-medium truncate">
+                                    {task.taskName}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
 
-                    {/* 작업 추가 공간 */}
-                    <div className="h-12 border-b border-gray-200"></div>
+                        {/* 작업 추가 공간 */}
+                        <div className="h-10 border-b border-gray-200"></div>
+                      </>
+                    )}
                   </div>
                 );
               }

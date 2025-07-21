@@ -9,9 +9,9 @@ import { updateTask, openTaskPanel } from '@/store/slices/taskSlice';
 import { getPriorityColor, getPriorityLabel } from '@/utils/taskUtils';
 
 const columns = [
-  { id: 'TODO', title: '할 일', color: 'bg-gray-100' },
-  { id: 'IN_PROGRESS', title: '수행 중', color: 'bg-blue-50' },
-  { id: 'COMPLETED', title: '완료', color: 'bg-green-50' },
+  { id: 'PEND-001', title: '할 일', color: 'bg-gray-100' },
+  { id: 'PEND-002', title: '수행 중', color: 'bg-blue-50' },
+  { id: 'PEND-003', title: '완료', color: 'bg-green-50' },
 ];
 
 export default function KanbanBoard() {
@@ -39,7 +39,7 @@ export default function KanbanBoard() {
           ...draggedTask,
           taskStatus: columnId,
           progressRate:
-            columnId === 'COMPLETED' ? '100' : draggedTask.progressRate,
+            columnId === 'PEND-003' ? '100' : draggedTask.progressRate,
         };
 
         await dispatch(
@@ -68,7 +68,7 @@ export default function KanbanBoard() {
       creatorId: 'USER001',
       dueDate: '',
       startDate: new Date().toISOString().split('T')[0].replace(/-/g, ''),
-      priorityCode: 'MEDIUM',
+      priorityCode: 'PCOD002', // API 코드 사용
       taskStatus: columnId,
       progressRate: '0',
       detailContent: '',
@@ -82,15 +82,27 @@ export default function KanbanBoard() {
     return tasks.filter((task) => task.taskStatus === columnId);
   };
 
-  const getAssigneeInfo = (userId) => {
-    if (!userId) return null;
-    const member = currentProject?.members?.find((m) => m.userId === userId);
+  const getAssigneeInfo = (task) => {
+    if (!task.userId) return null;
+
+    // API 응답에서 prjMem 객체 사용
+    if (task.prjMem && task.prjMem.userName) {
+      return {
+        userName: task.prjMem.userName,
+        userEmail: task.prjMem.userEmail || '',
+      };
+    }
+
+    // 프로젝트 멤버에서 찾기 (fallback)
+    const member = currentProject?.members?.find(
+      (m) => m.userId === task.userId
+    );
     return member || { userName: '미지정', userEmail: '' };
   };
 
   const handleCheckboxChange = async (task, checked) => {
     try {
-      const newStatus = checked ? 'COMPLETED' : 'TODO';
+      const newStatus = checked ? 'PEND-003' : 'PEND-001';
       const newProgressRate = checked ? '100' : '0';
 
       const updatedTask = {
@@ -140,7 +152,7 @@ export default function KanbanBoard() {
               {/* 작업 카드들 */}
               <div className="space-y-3 mb-4">
                 {columnTasks.map((task) => {
-                  const assigneeInfo = getAssigneeInfo(task.userId);
+                  const assigneeInfo = getAssigneeInfo(task);
                   return (
                     <div
                       key={task.taskNo}
@@ -152,13 +164,19 @@ export default function KanbanBoard() {
                       {/* 작업 헤더 */}
                       <div className="flex items-start space-x-3 mb-3">
                         <Checkbox
-                          checked={task.progressRate === '100'}
+                          checked={
+                            task.progressRate === '100' ||
+                            task.taskStatus === 'PEND-003'
+                          }
                           className="mt-1"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCheckboxChange(
                               task,
-                              !task.progressRate === '100'
+                              !(
+                                task.progressRate === '100' ||
+                                task.taskStatus === 'PEND-003'
+                              )
                             );
                           }}
                           onCheckedChange={(checked) =>
@@ -180,7 +198,7 @@ export default function KanbanBoard() {
                           {getPriorityLabel(task.priorityCode)}
                         </Badge>
                         <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium px-2 py-1 text-xs">
-                          {task.progressRate}%
+                          {task.progressRate || 0}%
                         </Badge>
                       </div>
 

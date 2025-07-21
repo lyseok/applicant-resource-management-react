@@ -50,7 +50,7 @@ export default function ProjectBoard() {
 
     const newPost = {
       prjPostNo: `POST${String(Date.now()).slice(-6)}`, // More unique ID
-      prjNo: currentProject?.prjNo || 'PRJ001',
+      prjNo: currentProject?.prjNo,
       userId: currentUser.userId,
       userName: currentUser.userName,
       title: newPostTitle,
@@ -118,6 +118,17 @@ export default function ProjectBoard() {
 
     dispatch(createComment({ postId, comment: newComment }));
     setCommentInputs({ ...commentInputs, [postId]: '' });
+
+    // Update selectedPost to reflect the new comment immediately
+    setSelectedPost((prevPost) => {
+      if (prevPost && prevPost.prjPostNo === postId) {
+        return {
+          ...prevPost,
+          comments: [...(prevPost.comments || []), newComment],
+        };
+      }
+      return prevPost;
+    });
   };
 
   const handleDeletePost = (postId) => {
@@ -221,8 +232,8 @@ export default function ProjectBoard() {
                         </div>
                       </div>
                       {/* <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button> */}
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button> */}
                     </div>
 
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">

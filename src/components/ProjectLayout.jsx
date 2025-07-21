@@ -2,34 +2,47 @@ import { useEffect } from 'react';
 import { useParams, Outlet } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchProject } from '@/store/slices/projectSlice';
-import { fetchTasks } from '@/store/slices/taskSlice';
-import { fetchPosts } from '@/store/slices/boardSlice'; // Import fetchPosts
+import { fetchProjectTasks, fetchWorkHistory } from '@/store/slices/taskSlice';
+import { fetchProjectPosts } from '@/store/slices/boardSlice';
+import { fetchProjectChatroom } from '@/store/slices/chatSlice';
 import ProjectHeader from './ProjectHeader';
 import TaskPanel from './TaskPanel';
+import LoadingSpinner from './LoadingSpinner';
 
 export default function ProjectLayout() {
   const { projectId } = useParams();
   const dispatch = useDispatch();
-  const { currentProject, loading } = useSelector((state) => state.project);
+  const { currentProject, projectLoading } = useSelector(
+    (state) => state.project
+  );
   const { isTaskPanelOpen, selectedTask } = useSelector((state) => state.tasks);
 
   useEffect(() => {
     if (projectId) {
-      dispatch(fetchProject(projectId));
-      dispatch(fetchTasks(projectId));
-      dispatch(fetchPosts(projectId)); // Fetch posts for the current project
+      // 프로젝트 전환 시 모든 관련 데이터를 순차적으로 로드
+      const loadProjectData = async () => {
+        try {
+          // 1. 프로젝트 기본 정보 로드
+          await dispatch(fetchProject(projectId)).unwrap();
+
+          // 2. 프로젝트 관련 데이터들을 병렬로 로드
+          await Promise.all([
+            dispatch(fetchProjectTasks(projectId)),
+            dispatch(fetchWorkHistory(projectId)),
+            dispatch(fetchProjectPosts(projectId)),
+            dispatch(fetchProjectChatroom(projectId)),
+          ]);
+        } catch (error) {
+          console.error('프로젝트 데이터 로드 실패:', error);
+        }
+      };
+
+      loadProjectData();
     }
   }, [dispatch, projectId]);
 
-  if (loading) {
-    return (
-      <div className="flex-1 bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">프로젝트를 불러오는 중...</p>
-        </div>
-      </div>
-    );
+  if (projectLoading) {
+    return <LoadingSpinner message="프로젝트를 불러오는 중..." />;
   }
 
   if (!currentProject) {
@@ -46,8 +59,6 @@ export default function ProjectLayout() {
     <div className="flex-1 bg-gray-50 min-h-screen">
       <ProjectHeader />
       <Outlet />
-
-      {/* 공통 작업 상세 패널 */}
       <TaskPanel isOpen={isTaskPanelOpen} task={selectedTask} />
     </div>
   );

@@ -14,8 +14,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
 } from 'recharts';
 import {
   TrendingUp,
@@ -39,17 +37,17 @@ export default function Dashboard() {
   const statusData = [
     {
       name: '할 일',
-      value: tasks.filter((t) => t.taskStatus === 'TODO').length,
+      value: tasks.filter((t) => t.taskStatus === 'PEND-001').length,
       color: '#3B82F6',
     },
     {
       name: '진행 중',
-      value: tasks.filter((t) => t.taskStatus === 'IN_PROGRESS').length,
+      value: tasks.filter((t) => t.taskStatus === 'PEND-002').length,
       color: '#F59E0B',
     },
     {
       name: '완료',
-      value: tasks.filter((t) => t.taskStatus === 'COMPLETED').length,
+      value: tasks.filter((t) => t.taskStatus === 'PEND-003').length,
       color: '#10B981',
     },
   ];
@@ -57,15 +55,15 @@ export default function Dashboard() {
   const priorityData = [
     {
       name: '높음',
-      value: tasks.filter((t) => t.priorityCode === 'HIGH').length,
+      value: tasks.filter((t) => t.priorityCode === 'PCOD001').length,
     },
     {
       name: '중간',
-      value: tasks.filter((t) => t.priorityCode === 'MEDIUM').length,
+      value: tasks.filter((t) => t.priorityCode === 'PCOD002').length,
     },
     {
       name: '낮음',
-      value: tasks.filter((t) => t.priorityCode === 'LOW').length,
+      value: tasks.filter((t) => t.priorityCode === 'PCOD003').length,
     },
   ];
 
@@ -258,45 +256,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-
-        {/* 주간 진행률 */}
-        <Card className="bg-white shadow-sm border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-              <Calendar className="w-5 h-5 mr-2 text-purple-600" />
-              주간 진행률
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weeklyProgress}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    stroke="#10B981"
-                    strokeWidth={3}
-                    dot={{ fill: '#10B981', strokeWidth: 2, r: 6 }}
-                    name="완료된 작업"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#6B7280"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={{ fill: '#6B7280', strokeWidth: 2, r: 4 }}
-                    name="전체 작업"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* 팀 성과 및 작업 내역 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

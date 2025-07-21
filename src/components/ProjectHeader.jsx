@@ -5,16 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Star, Plus, Users, Settings } from 'lucide-react';
 import ProjectMemberModal from './ProjectMemberModal';
+import ProjectSettingsModal from './ProjectSettingsModal'; // Import ProjectSettingsModal
 import { toggleProjectFavorite } from '@/store/slices/projectSlice';
 
-const tabs = [
+const ALL_TABS = [
   { id: 'overview', label: '요약', path: '' },
   { id: 'board', label: '보드', path: '/board' },
   { id: 'list', label: '목록', path: '/list' },
   { id: 'timeline', label: '타임라인', path: '/timeline' },
   { id: 'dashboard', label: '대시보드', path: '/dashboard' },
   { id: 'calendar', label: '캘린더', path: '/calendar' },
-  { id: 'bulletin', label: '게시판', path: '/bulletin' }, // Added bulletin board tab
+  { id: 'bulletin', label: '게시판', path: '/bulletin' },
+  { id: 'chat', label: '채팅', path: '/chat' }, // New chat tab
 ];
 
 export default function ProjectHeader() {
@@ -24,41 +26,25 @@ export default function ProjectHeader() {
   const dispatch = useDispatch();
   const { currentProject } = useSelector((state) => state.project);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false); // New state for settings modal
 
   const getCurrentTab = () => {
     const path = location.pathname;
 
-    // 정확한 경로 매칭
-    if (
-      path === `/project/${projectId}` ||
-      path === `/project/${projectId}/overview`
-    ) {
-      return 'overview';
-    }
-    if (path === `/project/${projectId}/board`) {
-      return 'board';
-    }
-    if (path === `/project/${projectId}/list`) {
-      return 'list';
-    }
-    if (path === `/project/${projectId}/timeline`) {
-      return 'timeline';
-    }
-    if (path === `/project/${projectId}/dashboard`) {
-      return 'dashboard';
-    }
-    if (path === `/project/${projectId}/calendar`) {
-      return 'calendar';
-    }
-    if (path === `/project/${projectId}/bulletin`) {
-      return 'bulletin';
-    }
+    // Find the tab that matches the current path
+    const matchedTab = ALL_TABS.find((tab) => {
+      const fullPath = `/project/${projectId}${tab.path}`;
+      return (
+        path === fullPath ||
+        (tab.path === '' && path === `/project/${projectId}`)
+      );
+    });
 
-    return 'overview'; // 기본값
+    return matchedTab ? matchedTab.id : 'overview'; // Default to overview
   };
 
   const handleTabChange = (tabId) => {
-    const tab = tabs.find((t) => t.id === tabId);
+    const tab = ALL_TABS.find((t) => t.id === tabId);
     if (tab) {
       const newPath = `/project/${projectId}${tab.path}`;
       navigate(newPath);
@@ -84,6 +70,14 @@ export default function ProjectHeader() {
   }
 
   const currentTab = getCurrentTab();
+  const visibleTabs =
+    currentProject.visibleTabs || ALL_TABS.map((tab) => tab.id); // Get visible tabs from project state
+  const filteredTabs = ALL_TABS.filter((tab) => visibleTabs.includes(tab.id)); // Filter tabs based on visibility
+
+  // Check if current user is owner
+  const isOwner = currentProject.members?.some(
+    (member) => member.userId === 'USER001' && member.authorityCode === 'OWNER'
+  ); // Assuming USER001 is the current user
 
   return (
     <div className="bg-white border-b border-gray-200 shadow-sm">
@@ -119,24 +113,27 @@ export default function ProjectHeader() {
               className="border-gray-300 hover:bg-gray-50 bg-transparent"
             >
               <Users className="w-4 h-4 mr-2" />
-              멤버 ({currentProject.members?.length || 0})
+              멤버 ({currentProject.prjMemList?.length || 0})
             </Button>
             <Button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 font-medium rounded-lg transition-colors">
               공유
             </Button>
-            <Button
-              variant="outline"
-              className="px-4 py-2 font-medium rounded-lg border-gray-300 hover:bg-gray-50 transition-colors bg-transparent"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              설정
-            </Button>
+            {isOwner && ( // Only show settings button to owner
+              <Button
+                variant="outline"
+                className="px-4 py-2 font-medium rounded-lg border-gray-300 hover:bg-gray-50 transition-colors bg-transparent"
+                onClick={() => setIsSettingsModalOpen(true)} // Open settings modal
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                설정
+              </Button>
+            )}
           </div>
         </div>
 
         {/* 탭 네비게이션 */}
         <div className="flex space-x-8 border-b border-gray-200">
-          {tabs.map((tab) => (
+          {filteredTabs.map((tab) => (
             <button
               key={tab.id}
               className={`pb-3 px-1 text-sm font-medium border-b-2 transition-all duration-200 ${
@@ -165,6 +162,15 @@ export default function ProjectHeader() {
         onClose={() => setIsMemberModalOpen(false)}
         project={currentProject}
       />
+
+      {/* 프로젝트 설정 모달 */}
+      {isOwner && ( // Only render settings modal if current user is owner
+        <ProjectSettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          project={currentProject}
+        />
+      )}
     </div>
   );
 }

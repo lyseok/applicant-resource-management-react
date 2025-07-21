@@ -19,17 +19,20 @@ import {
 } from '@/store/slices/projectSlice';
 
 const MEMBER_ROLES = [
-  { value: 'OWNER', label: '소유자', color: 'bg-purple-100 text-purple-800' },
-  { value: 'ADMIN', label: '관리자', color: 'bg-blue-100 text-blue-800' },
-  { value: 'MEMBER', label: '멤버', color: 'bg-green-100 text-green-800' },
-  { value: 'VIEWER', label: '뷰어', color: 'bg-gray-100 text-gray-800' },
+  { value: 'PM', label: '매니저', color: 'bg-purple-100 text-purple-800' },
+  { value: 'AA', label: '관리자', color: 'bg-blue-100 text-blue-800' },
+  { value: 'TA', label: '팀원', color: 'bg-green-100 text-green-800' },
 ];
 
 export default function ProjectMemberModal({ isOpen, onClose, project }) {
   const dispatch = useDispatch();
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('MEMBER');
+  const [inviteRole, setInviteRole] = useState('TA');
   const [loading, setLoading] = useState(false);
+
+  // 활성 멤버만 필터링 (deleteDate가 null인 멤버)
+  const activeMembers =
+    project?.prjMemList?.filter((member) => member.deleteDate === null) || [];
 
   const handleInviteMember = async (e) => {
     e.preventDefault();
@@ -48,7 +51,7 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
       ).unwrap();
 
       setInviteEmail('');
-      setInviteRole('MEMBER');
+      setInviteRole('TA');
     } catch (error) {
       console.error('멤버 초대 실패:', error);
     } finally {
@@ -133,13 +136,13 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {MEMBER_ROLES.filter(
-                        (role) => role.value !== 'OWNER'
-                      ).map((role) => (
-                        <SelectItem key={role.value} value={role.value}>
-                          {role.label}
-                        </SelectItem>
-                      ))}
+                      {MEMBER_ROLES.filter((role) => role.value !== 'PM').map(
+                        (role) => (
+                          <SelectItem key={role.value} value={role.value}>
+                            {role.label}
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                   <Button
@@ -170,12 +173,12 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-gray-700">
-                  프로젝트 멤버 ({project.members?.length || 0})
+                  프로젝트 멤버 ({activeMembers.length})
                 </h3>
               </div>
 
               <div className="space-y-3">
-                {project.members?.map((member) => {
+                {activeMembers.map((member) => {
                   const roleInfo = getRoleInfo(member.authorityCode);
                   return (
                     <div
@@ -184,22 +187,21 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
                     >
                       <Avatar className="w-10 h-10">
                         <AvatarFallback className="bg-blue-500 text-white font-medium">
-                          {member.userName?.charAt(0) ||
-                            member.userEmail?.charAt(0)}
+                          {member.userName?.charAt(0) || 'U'}
                         </AvatarFallback>
                       </Avatar>
 
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-gray-900">
-                          {member.userName || member.userEmail}
+                          {member.userName || '이름 없음'}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {member.userEmail}
+                          {member.userPosition || '직책 없음'}
                         </div>
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {member.authorityCode === 'OWNER' ? (
+                        {member.authorityCode === 'PM' ? (
                           <Badge className={roleInfo.color}>
                             {roleInfo.label}
                           </Badge>
@@ -215,7 +217,7 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
                             </SelectTrigger>
                             <SelectContent>
                               {MEMBER_ROLES.filter(
-                                (role) => role.value !== 'OWNER'
+                                (role) => role.value !== 'PM'
                               ).map((role) => (
                                 <SelectItem key={role.value} value={role.value}>
                                   {role.label}
@@ -225,7 +227,7 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
                           </Select>
                         )}
 
-                        {member.authorityCode !== 'OWNER' && (
+                        {member.authorityCode !== 'PM' && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -240,7 +242,7 @@ export default function ProjectMemberModal({ isOpen, onClose, project }) {
                   );
                 })}
 
-                {(!project.members || project.members.length === 0) && (
+                {activeMembers.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     아직 프로젝트 멤버가 없습니다.
                   </div>

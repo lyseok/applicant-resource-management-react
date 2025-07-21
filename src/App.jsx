@@ -12,7 +12,8 @@ import TaskList from './components/TaskList';
 import GanttChart from './components/GanttChart';
 import Dashboard from './components/Dashboard';
 import Calendar from './components/Calendar';
-import ProjectBoard from './components/ProjectBoard'; // Import ProjectBoard
+import ProjectBoard from './components/ProjectBoard';
+import ChatRoom from './components/ChatRoom';
 
 function App() {
   return (
@@ -33,8 +34,8 @@ function App() {
           <Route path="timeline" element={<GanttChart />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="calendar" element={<Calendar />} />
-          <Route path="bulletin" element={<ProjectBoard />} />{' '}
-          {/* Added route for ProjectBoard */}
+          <Route path="bulletin" element={<ProjectBoard />} />
+          <Route path="chat" element={<ChatRoom />} />{' '}
         </Route>
       </Routes>
     </Layout>
