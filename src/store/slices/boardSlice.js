@@ -128,8 +128,8 @@ const boardSlice = createSlice({
       .addCase(deleteCommentAsync.fulfilled, (state, action) => {
         const { postId, commentId } = action.payload;
         const post = state.posts.find((p) => p.prjPostNo === postId);
-        if (post && post.comments) {
-          post.comments = post.comments.filter(
+        if (post && post.bbsCommentList) {
+          post.bbsCommentList = post.bbsCommentList.filter(
             (c) => c.commentNo !== commentId
           );
         }
