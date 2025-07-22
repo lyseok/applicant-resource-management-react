@@ -139,6 +139,12 @@ export default function TaskPanel({ isOpen, task }) {
     dispatch(closeTaskPanel());
   };
 
+  // 담당자 변경 핸들러 - UI 즉시 업데이트
+  const handleAssigneeChange = (newUserId) => {
+    console.log('Assignee changed to:', newUserId);
+    setUserId(newUserId === 'none' ? '' : newUserId);
+  };
+
   const availableTasks = tasks.filter((t) => t.taskNo !== task?.taskNo);
 
   // 담당자 정보 가져오기
@@ -146,7 +152,7 @@ export default function TaskPanel({ isOpen, task }) {
     if (!userId) return null;
 
     // API 응답에서 prjMem 객체 사용
-    if (task?.prjMem && task.prjMem.userName) {
+    if (task?.prjMem && task.prjMem.userName && task.prjMem.userId === userId) {
       return {
         userName: task.prjMem.userName,
         userEmail: task.prjMem.userEmail || '',
@@ -277,10 +283,13 @@ export default function TaskPanel({ isOpen, task }) {
           {/* 담당자 선택 */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">담당자</label>
-            <Select value={userId} onValueChange={setUserId}>
+            <Select
+              value={userId || 'none'}
+              onValueChange={handleAssigneeChange}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="담당자를 선택하세요">
-                  {assigneeInfo && (
+                  {assigneeInfo ? (
                     <div className="flex items-center space-x-2">
                       <Avatar className="w-6 h-6">
                         <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
@@ -289,6 +298,8 @@ export default function TaskPanel({ isOpen, task }) {
                       </Avatar>
                       <span className="text-sm">{assigneeInfo.userName}</span>
                     </div>
+                  ) : (
+                    <span className="text-gray-500">담당자 미지정</span>
                   )}
                 </SelectValue>
               </SelectTrigger>
