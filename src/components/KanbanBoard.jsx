@@ -21,6 +21,12 @@ export default function KanbanBoard() {
   const [draggedTask, setDraggedTask] = useState(null);
 
   const handleDragStart = (e, task) => {
+    // task 객체가 유효한지 확인
+    if (!task || !task.taskNo) {
+      console.error('Invalid task for drag:', task);
+      return;
+    }
+
     setDraggedTask(task);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', task.taskNo);
@@ -35,6 +41,13 @@ export default function KanbanBoard() {
     e.preventDefault();
     if (draggedTask && draggedTask.taskStatus !== columnId) {
       try {
+        // taskNo가 유효한지 확인
+        if (!draggedTask.taskNo) {
+          console.error('Invalid task ID:', draggedTask);
+          alert('작업 ID가 유효하지 않습니다.');
+          return;
+        }
+
         const updatedTask = {
           ...draggedTask,
           taskStatus: columnId,
@@ -42,14 +55,20 @@ export default function KanbanBoard() {
             columnId === 'PEND-003' ? '100' : draggedTask.progressRate,
         };
 
+        console.log('Calling updateTask with:', {
+          taskId: draggedTask.taskNo,
+          taskData: updatedTask,
+        });
+
         await dispatch(
           updateTask({
-            id: draggedTask.taskNo,
+            taskId: draggedTask.taskNo, // id 대신 taskId로 변경
             taskData: updatedTask,
           })
-        );
+        ).unwrap();
       } catch (error) {
         console.error('작업 상태 변경 실패:', error);
+        alert('작업 상태 변경에 실패했습니다. 다시 시도해주세요.');
       }
     }
     setDraggedTask(null);
@@ -102,6 +121,11 @@ export default function KanbanBoard() {
 
   const handleCheckboxChange = async (task, checked) => {
     try {
+      if (!task.taskNo) {
+        console.error('Invalid task for checkbox change:', task);
+        return;
+      }
+
       const newStatus = checked ? 'PEND-003' : 'PEND-001';
       const newProgressRate = checked ? '100' : '0';
 
@@ -113,12 +137,13 @@ export default function KanbanBoard() {
 
       await dispatch(
         updateTask({
-          id: task.taskNo,
+          taskId: task.taskNo, // id 대신 taskId로 변경
           taskData: updatedTask,
         })
-      );
+      ).unwrap();
     } catch (error) {
       console.error('작업 상태 변경 실패:', error);
+      alert('작업 상태 변경에 실패했습니다.');
     }
   };
 

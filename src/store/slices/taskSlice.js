@@ -28,11 +28,27 @@ export const createTaskAsync = createAsyncThunk(
 
 export const updateTaskAsync = createAsyncThunk(
   'tasks/updateTask',
-  async ({ id, taskData }, { rejectWithValue }) => {
+  async ({ taskId, taskData }, { rejectWithValue }) => {
     try {
-      const response = await taskAPI.updateTask(id, taskData);
+      // taskId와 taskData 유효성 검사
+      console.log('updateTaskAsync called with:', { taskId, taskData });
+
+      if (!taskId || taskId === 'undefined' || taskId === 'null') {
+        console.error('Invalid taskId:', taskId);
+        throw new Error('작업 ID가 유효하지 않습니다.');
+      }
+
+      if (!taskData) {
+        console.error('Invalid taskData:', taskData);
+        throw new Error('작업 데이터가 유효하지 않습니다.');
+      }
+
+      const response = await taskAPI.updateTask(taskId, taskData);
       return response.data;
     } catch (error) {
+      console.error('Task update error:', error);
+      console.error('TaskId:', taskId);
+      console.error('TaskData:', taskData);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
@@ -42,9 +58,15 @@ export const deleteTaskAsync = createAsyncThunk(
   'tasks/deleteTask',
   async (taskId, { rejectWithValue }) => {
     try {
+      // taskId가 undefined인지 확인
+      if (!taskId || taskId === 'undefined') {
+        throw new Error('작업 ID가 유효하지 않습니다.');
+      }
+
       await taskAPI.deleteTask(taskId);
-      return taskId;
+      return taskId; // 삭제된 작업의 ID 반환
     } catch (error) {
+      console.error('Task delete error:', error);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
@@ -54,8 +76,12 @@ export const updateTaskStatusAsync = createAsyncThunk(
   'tasks/updateTaskStatus',
   async ({ taskId, status }, { rejectWithValue }) => {
     try {
+      if (!taskId || taskId === 'undefined') {
+        throw new Error('작업 ID가 유효하지 않습니다.');
+      }
+
       const response = await taskAPI.updateTaskStatus(taskId, status);
-      return response.data;
+      return { taskId, status, data: response.data };
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
     }
@@ -174,10 +200,10 @@ const taskSlice = createSlice({
       // 작업 상태 변경
       .addCase(updateTaskStatusAsync.fulfilled, (state, action) => {
         const index = state.tasks.findIndex(
-          (task) => task.taskNo === action.payload.taskNo
+          (task) => task.taskNo === action.payload.taskId
         );
         if (index !== -1) {
-          state.tasks[index] = action.payload;
+          state.tasks[index].taskStatus = action.payload.status;
           state.statistics = calculateStatistics(state.tasks);
         }
       })

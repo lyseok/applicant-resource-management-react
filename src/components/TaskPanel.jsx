@@ -11,22 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  X,
-  Check,
-  ThumbsUp,
-  Paperclip,
-  Share2,
-  Link,
-  Maximize2,
-  MoreHorizontal,
-  ChevronDown,
-  Plus,
-  Bell,
-} from 'lucide-react';
+import { X, Check, Trash2, ChevronDown, Plus, Bell } from 'lucide-react';
 import {
   createTaskAsync,
   updateTaskAsync,
+  deleteTaskAsync,
   closeTaskPanel,
 } from '@/store/slices/taskSlice';
 
@@ -34,6 +23,7 @@ export default function TaskPanel({ isOpen, task }) {
   const dispatch = useDispatch();
   const { tasks, loading } = useSelector((state) => state.tasks);
   const { currentProject } = useSelector((state) => state.project);
+  const { user } = useSelector((state) => state.auth);
 
   const [taskName, setTaskName] = useState('');
   const [userId, setUserId] = useState('');
@@ -45,6 +35,7 @@ export default function TaskPanel({ isOpen, task }) {
   const [progressRate, setProgressRate] = useState('0');
   const [upperTaskNo, setUpperTaskNo] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 활성 멤버만 필터링 (deleteDate가 null인 멤버)
   const activeMembers =
@@ -64,6 +55,17 @@ export default function TaskPanel({ isOpen, task }) {
       setDetailContent(task.detailContent || '');
       setProgressRate(task.progressRate || '0');
       setUpperTaskNo(task.upperTaskNo || '');
+    } else {
+      // 새 작업일 때 초기화
+      setTaskName('');
+      setUserId('');
+      setDueDate('');
+      setStartDate('');
+      setPriorityCode('PCOD002');
+      setTaskStatus('PEND-001');
+      setDetailContent('');
+      setProgressRate('0');
+      setUpperTaskNo('');
     }
   }, [task]);
 
@@ -74,7 +76,7 @@ export default function TaskPanel({ isOpen, task }) {
       taskName,
       prjNo: currentProject?.prjNo,
       userId,
-      creatorId,
+      creatorId: user?.userId,
       dueDate,
       startDate,
       priorityCode,
@@ -86,10 +88,10 @@ export default function TaskPanel({ isOpen, task }) {
 
     try {
       if (task?.taskNo) {
-        // 기존 작업 업데이트
+        // 기존 작업 업데이트 - taskNo를 정확히 전달
         await dispatch(
           updateTaskAsync({
-            taskId: task.taskNo,
+            taskId: task.taskNo, // task.taskNo를 taskId로 전달
             taskData: { ...taskData, taskNo: task.taskNo },
           })
         ).unwrap();
@@ -106,6 +108,23 @@ export default function TaskPanel({ isOpen, task }) {
       }, 1500);
     } catch (error) {
       console.error('작업 저장 실패:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!task?.taskNo) return;
+
+    try {
+      await dispatch(deleteTaskAsync(task.taskNo)).unwrap();
+
+      // 성공 메시지 표시
+      setShowSuccessMessage(true);
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+        dispatch(closeTaskPanel());
+      }, 1500);
+    } catch (error) {
+      console.error('작업 삭제 실패:', error);
     }
   };
 
@@ -150,7 +169,40 @@ export default function TaskPanel({ isOpen, task }) {
       {showSuccessMessage && (
         <div className="fixed top-4 right-4 z-[60] bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2">
           <Check className="w-5 h-5" />
-          <span className="font-medium">저장이 완료되었습니다!</span>
+          <span className="font-medium">
+            {isNewTask ? '작업이 생성되었습니다!' : '저장이 완료되었습니다!'}
+          </span>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold mb-4">작업 삭제</h3>
+            <p className="text-gray-600 mb-6">
+              이 작업을 삭제하시겠습니까? 삭제된 작업은 복구할 수 없습니다.
+            </p>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1"
+              >
+                취소
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  handleDelete();
+                }}
+                className="flex-1"
+              >
+                삭제
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -165,71 +217,44 @@ export default function TaskPanel({ isOpen, task }) {
         {/* 헤더 */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
           <div className="flex items-center justify-between mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className={`border-gray-300 hover:bg-gray-50 font-medium rounded-lg ${
-                progressRate === '100'
-                  ? 'bg-green-100 text-green-800 border-green-300'
-                  : 'bg-transparent'
-              }`}
-              onClick={handleMarkComplete}
-            >
-              <Check className="w-4 h-4 mr-2" />
-              {progressRate === '100' ? '완료됨' : '완료로 표시'}
-            </Button>
             <div className="flex items-center space-x-2">
+              {/* 완료됨 버튼 */}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className={`border-gray-300 hover:bg-gray-50 font-medium rounded-lg ${
+                  progressRate === '100'
+                    ? 'bg-green-100 text-green-800 border-green-300'
+                    : 'bg-transparent'
+                }`}
+                onClick={handleMarkComplete}
               >
-                <ThumbsUp className="w-4 h-4 text-gray-600" />
+                <Check className="w-4 h-4 mr-2" />
+                {progressRate === '100' ? '완료됨' : '완료로 표시'}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Paperclip className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Share2 className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Link className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Maximize2 className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <MoreHorizontal className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-                onClick={handleClose}
-              >
-                <X className="w-4 h-4 text-gray-600" />
-              </Button>
+
+              {/* 삭제 버튼 - 기존 작업에만 표시 */}
+              {!isNewTask && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-2 hover:bg-red-50 hover:text-red-600 rounded-lg"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              )}
             </div>
+
+            {/* 닫기 버튼 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-2 hover:bg-gray-100 rounded-lg"
+              onClick={handleClose}
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </Button>
           </div>
         </div>
 
