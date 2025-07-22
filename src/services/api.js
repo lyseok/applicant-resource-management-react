@@ -134,6 +134,18 @@ export const workHistoryAPI = {
   // 프로젝트 작업 내역 조회
   getWorkHistory: (projectId) => api.get(`/projects/${projectId}/work-history`),
 
+  // 전체 최근 작업 내역 조회 (프로젝트 ID 없이)
+  getAllRecentWorkHistory: (limit = 10) =>
+    api.get('/work-history/recent', {
+      params: { limit },
+    }),
+
+  // 프로젝트별 최근 작업 내역 조회
+  getRecentWorkHistory: (projectId, limit = 10) =>
+    api.get(`/projects/${projectId}/work-history/recent`, {
+      params: { limit },
+    }),
+
   // 작업 내역 생성 (보통 서버에서 자동 생성)
   createWorkHistory: (historyData) =>
     api.post('/work-history', {
