@@ -53,7 +53,7 @@ export default function Header() {
 
   const handleMyPage = () => {
     console.log('마이페이지');
-    navigate('/mypage');
+    location.href = 'http://localhost/mypage';
   };
 
   const handleGoToDditJob = () => {
@@ -155,12 +155,12 @@ export default function Header() {
               {/* <DropdownMenuItem onClick={handleLeaveProject}>
                 <ArrowLeftCircle className="mr-2 h-4 w-4" />
                 <span>프로젝트 나가기</span>
-              </DropdownMenuItem>
+              </DropdownMenuItem> */}
+              {/* <DropdownMenuSeparator /> */}
               <DropdownMenuItem onClick={handleMyPage}>
                 <User className="mr-2 h-4 w-4" />
                 <span>마이페이지</span>
               </DropdownMenuItem>
-              <DropdownMenuSeparator /> */}
               <DropdownMenuItem onClick={handleGoToDditJob}>
                 <ArrowLeftCircle className="mr-2 h-4 w-4" />
                 <span>띹잡 돌아가기</span>
