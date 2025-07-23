@@ -1,4 +1,3 @@
-// src/components/TaskToolbar.jsx
 import { Button } from '@/components/ui/button';
 import { Plus, Search } from 'lucide-react';
 

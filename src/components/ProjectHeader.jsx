@@ -16,7 +16,6 @@ const ALL_TABS = [
   { id: 'dashboard', label: '대시보드', path: '/dashboard' },
   { id: 'calendar', label: '캘린더', path: '/calendar' },
   { id: 'bulletin', label: '게시판', path: '/bulletin' },
-  { id: 'chat', label: '채팅', path: '/chat' },
   { id: 'admin', label: '관리', path: '/admin', adminOnly: true }, // 관리자 전용 탭
 ];
 

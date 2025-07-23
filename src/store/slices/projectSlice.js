@@ -9,7 +9,6 @@ const initialState = {
   error: null,
 };
 
-// 비동기 액션들
 export const fetchUserProjectsAsync = createAsyncThunk(
   'project/fetchUserProjects',
   async (_, { rejectWithValue }) => {

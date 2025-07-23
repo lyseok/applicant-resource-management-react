@@ -73,62 +73,7 @@ const WorkHistoryPanel = ({ projectId }) => {
     } catch (error) {
       console.error('작업 내역 로드 실패:', error);
       setError('작업 내역을 불러오는데 실패했습니다.');
-      // 에러 시 샘플 데이터 사용
-      setWorkHistory([
-        {
-          workHistNo: 'WKHR000009',
-          prjNo: 'PRJT000008',
-          userId: 'testUser',
-          workDate: '2025-07-22 22:23:00',
-          workTable: 'TASK',
-          workType: 'STATUS_CHANGE',
-          workTarget: 'TASK000006',
-          workContent:
-            "'디자인 시안 제작' 작업의 상태를 '할 일'에서 '진행 중'로 변경했습니다.",
-        },
-        {
-          workHistNo: 'WKHR000008',
-          prjNo: 'PRJT000008',
-          userId: 'testUser',
-          workDate: '2025-07-22 22:13:20',
-          workTable: 'TASK',
-          workType: 'CREATE',
-          workTarget: 'TASK000015',
-          workContent: "새로운 작업 'ㅁㄴㅇㅈㅇ'을(를) 생성했습니다.",
-        },
-        {
-          workHistNo: 'WKHR000007',
-          prjNo: 'PRJT000008',
-          userId: 'testUser',
-          workDate: '2025-07-22 22:07:22',
-          workTable: 'TASK',
-          workType: 'STATUS_CHANGE',
-          workTarget: 'TASK000004',
-          workContent:
-            "'사용자 인증 API 개발 (수정됨)' 작업의 상태를 '완료'에서 '진행 중'로 변경했습니다.",
-        },
-        {
-          workHistNo: 'WKHR000006',
-          prjNo: 'PRJT000008',
-          userId: 'testUser',
-          workDate: '2025-07-22 21:56:32',
-          workTable: 'TASK',
-          workType: 'STATUS_CHANGE',
-          workTarget: 'TASK000006',
-          workContent:
-            "'디자인 시안 제작' 작업의 상태를 '진행 중'에서 '할 일'로 변경했습니다.",
-        },
-        {
-          workHistNo: 'WKHR000005',
-          prjNo: 'PRJT000008',
-          userId: 'testUser',
-          workDate: '2025-07-04 00:00:00',
-          workTable: 'PRJ_TASK',
-          workType: 'C',
-          workTarget: 'TASK000004',
-          workContent: "새로운 작업 '결제 시스템 연동' 생성",
-        },
-      ]);
+      setWorkHistory();
     } finally {
       setLoading(false);
     }

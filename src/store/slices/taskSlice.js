@@ -7,7 +7,6 @@ import {
   WORK_TABLES,
 } from '../../utils/workHistoryUtils';
 
-// 비동기 액션들
 export const fetchProjectTasks = createAsyncThunk(
   'tasks/fetchProjectTasks',
   async (projectId, { rejectWithValue }) => {

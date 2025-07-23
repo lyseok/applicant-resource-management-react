@@ -81,32 +81,6 @@ export default function Header() {
     location.href = BASE_REDIRECT_URL; // 로그인 안되어 있으면 띹잡으로 돌아갑니다
   };
 
-  // 인증되지 않은 경우 로그인 버튼 표시
-  if (!isAuthenticated && initialized) {
-    // return (
-    //   <header className="bg-white border-b border-gray-200 px-6 py-3 shadow-sm">
-    //     <div className="flex items-center justify-between">
-    //       <div className="flex items-center space-x-4">
-    //         <div className="flex items-center space-x-3">
-    //           <div className="w-9 h-9 bg-violet-600 rounded-lg flex items-center justify-center shadow-sm">
-    //             <span className="text-white font-bold text-lg">D</span>
-    //           </div>
-    //           <span className="font-bold text-xl text-gray-900">DDIT JOB</span>
-    //         </div>
-    //       </div>
-    //       <div className="flex items-center space-x-3">
-    //         <Button
-    //           onClick={() => navigate('/login')}
-    //           className="bg-blue-600 hover:bg-blue-700 text-white"
-    //         >
-    //           로그인
-    //         </Button>
-    //       </div>
-    //     </div>
-    //   </header>
-    // );
-  }
-
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-3 shadow-sm">
       <div className="flex items-center justify-between">
