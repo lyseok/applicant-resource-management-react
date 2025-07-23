@@ -263,15 +263,6 @@ const Home = () => {
               <CardTitle className="text-xl font-semibold text-gray-900">
                 최근 프로젝트
               </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-blue-600 hover:bg-blue-50"
-                onClick={() => navigate('/my-workspace')}
-              >
-                모두 보기
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
             </div>
           </CardHeader>
           <CardContent>

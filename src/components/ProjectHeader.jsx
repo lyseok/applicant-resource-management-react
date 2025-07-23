@@ -19,6 +19,18 @@ const ALL_TABS = [
   { id: 'admin', label: '관리', path: '/admin', adminOnly: true }, // 관리자 전용 탭
 ];
 
+const getProjectStatusLabel = (statusCode) => {
+  const statusMap = {
+    'PROG-001': '진행중',
+    'PROG-002': '지연',
+    'PROG-003': '개선예시 아이디어',
+    'PROG-004': '완료',
+    'PROG-005': '계획중',
+    'PROG-006': '보류',
+  };
+  return statusMap[statusCode] || statusCode;
+};
+
 export default function ProjectHeader() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,12 +58,6 @@ export default function ProjectHeader() {
     if (tab) {
       const newPath = `/project/${projectId}${tab.path}`;
       navigate(newPath);
-    }
-  };
-
-  const handleToggleFavorite = () => {
-    if (currentProject) {
-      dispatch(toggleProjectFavorite(currentProject.prjNo));
     }
   };
 
@@ -102,20 +108,6 @@ export default function ProjectHeader() {
             <h1 className="text-2xl font-bold text-gray-900">
               {currentProject.projectName}
             </h1>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleFavorite}
-              className="p-1"
-            >
-              <Star
-                className={`w-6 h-6 transition-colors ${
-                  currentProject.isFavorite
-                    ? 'text-yellow-500 fill-yellow-500'
-                    : 'text-gray-400 hover:text-yellow-500'
-                }`}
-              />
-            </Button>
             {isAdmin && (
               <Badge className="bg-purple-100 text-purple-800 border-purple-200 px-2 py-1 text-xs">
                 <Shield className="w-3 h-3 mr-1" />
@@ -125,7 +117,7 @@ export default function ProjectHeader() {
           </div>
           <div className="flex items-center space-x-3">
             <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 px-3 py-1">
-              {currentProject.projectStatus}
+              {getProjectStatusLabel(currentProject.projectStatus)}
             </Badge>
             <Button
               variant="outline"

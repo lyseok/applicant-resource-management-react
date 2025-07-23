@@ -21,10 +21,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 const PROJECT_STATUSES = [
-  { value: '계획중', label: '계획 중' },
-  { value: '진행중', label: '진행 중' },
-  { value: '완료', label: '완료' },
-  { value: '보류', label: '보류' },
+  { value: 'PROG-000', label: '계획 중' },
+  { value: 'PROG-001', label: '진행 중' },
+  { value: 'PROG-004', label: '완료' },
+  { value: 'PROG-003', label: '보류' },
 ];
 
 const ALL_TABS = [
@@ -84,19 +84,19 @@ export default function ProjectSettingsModal({
         })
       ).unwrap();
 
-      await dispatch(
-        updateProjectVisibleTabs({
-          projectId: project.prjNo,
-          visibleTabs,
-        })
-      ).unwrap();
+      // await dispatch(
+      //   updateProjectVisibleTabs({
+      //     projectId: project.prjNo,
+      //     visibleTabs,
+      //   })
+      // ).unwrap();
 
-      await dispatch(
-        updateChatroomName({
-          projectId: project.prjNo,
-          chatroomName: chatroomName,
-        })
-      ).unwrap();
+      // await dispatch(
+      //   updateChatroomName({
+      //     projectId: project.prjNo,
+      //     chatroomName: chatroomName,
+      //   })
+      // ).unwrap();
 
       onClose();
     } catch (error) {
@@ -189,7 +189,7 @@ export default function ProjectSettingsModal({
             </div>
 
             {/* 탭 가시성 설정 */}
-            <div className="space-y-4">
+            {/* <div className="space-y-4">
               <h3 className="text-sm font-medium text-gray-700">탭 가시성</h3>
               <div className="grid grid-cols-2 gap-3">
                 {ALL_TABS.map((tab) => (
@@ -210,10 +210,10 @@ export default function ProjectSettingsModal({
                   </div>
                 ))}
               </div>
-            </div>
+            </div> */}
 
             {/* 채팅방 설정 */}
-            <div className="space-y-4">
+            {/* <div className="space-y-4">
               <h3 className="text-sm font-medium text-gray-700 flex items-center">
                 <MessageCircle className="w-4 h-4 mr-2" />
                 채팅방 설정
@@ -227,7 +227,7 @@ export default function ProjectSettingsModal({
                   onChange={(e) => setChatroomName(e.target.value)}
                 />
               </div>
-            </div>
+            </div> */}
 
             {/* 프로젝트 삭제 - OWNER만 가능 */}
             {isOwner && (

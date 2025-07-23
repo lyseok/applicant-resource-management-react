@@ -140,7 +140,6 @@ export default function GanttChart() {
       0
     );
 
-    // Calculate the effective start and end dates within the current month's view
     const effectiveStartDate = new Date(
       Math.max(taskStartDate.getTime(), monthStart.getTime())
     );
@@ -148,12 +147,11 @@ export default function GanttChart() {
       Math.min(taskEndDate.getTime(), monthEnd.getTime())
     );
 
-    // If the task doesn't overlap with the current month, return zero width
     if (effectiveStartDate > effectiveEndDate) {
       return { left: '0%', width: '0%' };
     }
 
-    const totalDaysInMonth = monthEnd.getDate(); // Number of days in the current month
+    const totalDaysInMonth = monthEnd.getDate();
     const daysFromMonthStartToEffectiveStart =
       (effectiveStartDate.getTime() - monthStart.getTime()) /
       (1000 * 60 * 60 * 24);
@@ -399,17 +397,6 @@ export default function GanttChart() {
               </div>
             );
           })}
-
-          {/* 섹션 추가 버튼 */}
-          <Button
-            variant="ghost"
-            className="w-full justify-start p-4 text-gray-500 hover:bg-gray-50"
-            style={{ height: `${SECTION_HEADER_HEIGHT}px` }}
-            onClick={() => handleAddTask('PEND-001')}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            섹션 추가
-          </Button>
         </div>
 
         {/* 오른쪽 간트 차트 */}
