@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect } from 'react';
 import { useParams, Outlet } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -7,6 +9,7 @@ import { fetchProjectPosts } from '@/store/slices/boardSlice';
 import { fetchProjectChatroom } from '@/store/slices/chatSlice';
 import ProjectHeader from './ProjectHeader';
 import TaskPanel from './TaskPanel';
+import FloatingChatWidget from './FloatingChatWidget';
 import LoadingSpinner from './LoadingSpinner';
 
 export default function ProjectLayout() {
@@ -19,13 +22,9 @@ export default function ProjectLayout() {
 
   useEffect(() => {
     if (projectId) {
-      // 프로젝트 전환 시 모든 관련 데이터를 순차적으로 로드
       const loadProjectData = async () => {
         try {
-          // 1. 프로젝트 기본 정보 로드
           await dispatch(fetchProject(projectId)).unwrap();
-
-          // 2. 프로젝트 관련 데이터들을 병렬로 로드
           await Promise.all([
             dispatch(fetchProjectTasks(projectId)),
             dispatch(fetchWorkHistory(projectId)),
@@ -56,10 +55,12 @@ export default function ProjectLayout() {
   }
 
   return (
-    <div className="flex-1 bg-gray-50 min-h-screen">
+    <div className="flex-1 bg-gray-50 min-h-screen relative">
       <ProjectHeader />
       <Outlet />
       <TaskPanel isOpen={isTaskPanelOpen} task={selectedTask} />
+      {/* 프로젝트 상세페이지에서만 플로팅 채팅 위젯 표시 */}
+      <FloatingChatWidget />
     </div>
   );
 }

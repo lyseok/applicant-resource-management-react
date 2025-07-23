@@ -12,7 +12,6 @@ import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
 import {
   Plus,
-  Star,
   Users,
   CheckCircle,
   TrendingUp,
@@ -75,33 +74,50 @@ const Home = () => {
     }
   };
 
-  // 프로젝트 통계 계산
+  // 프로젝트 완료 여부 확인 (finishDate가 있으면 완료)
+  const isProjectCompleted = (project) => {
+    return project.finishDate && project.finishDate !== null;
+  };
+
+  // 프로젝트 통계 계산 (수정된 로직)
   const projectStats = {
     total: projects.length,
-    active: projects.filter(
-      (p) => getProjectStatusLabel(p.prjStatus) === '진행중'
-    ).length,
-    completed: projects.filter(
-      (p) => getProjectStatusLabel(p.prjStatus) === '완료'
-    ).length,
+    active: projects.filter((p) => {
+      // finishDate가 없고 projectStatus가 진행중인 경우
+      return (
+        !isProjectCompleted(p) &&
+        getProjectStatusLabel(p.projectStatus) === '진행중'
+      );
+    }).length,
+    completed: projects.filter((p) => {
+      // finishDate가 있거나 projectStatus가 완료인 경우
+      return (
+        isProjectCompleted(p) ||
+        getProjectStatusLabel(p.projectStatus) === '완료'
+      );
+    }).length,
     delayed: projects.filter(
-      (p) => getProjectStatusLabel(p.prjStatus) === '지연'
+      (p) => getProjectStatusLabel(p.projectStatus) === '지연'
     ).length,
-    favorites: projects.filter((p) => p.isFavorite).length,
   };
 
   // 최근 프로젝트 (최대 6개)
   const recentProjects = projects.slice(0, 6);
 
-  // 프로젝트 색상 가져오기
+  // 프로젝트 색상 가져오기 (projectColor 필드 사용)
   const getProjectColor = (project) => {
+    if (project.projectColor) {
+      // HEX 색상을 Tailwind 클래스로 변환하지 않고 직접 사용
+      return project.projectColor;
+    }
+
     const colors = [
-      'bg-blue-500',
-      'bg-green-500',
-      'bg-purple-500',
-      'bg-red-500',
-      'bg-yellow-500',
-      'bg-indigo-500',
+      '#3B82F6',
+      '#10B981',
+      '#8B5CF6',
+      '#EF4444',
+      '#F59E0B',
+      '#6366F1',
     ];
     const projectId = project.prjNo || project.id || '1';
     return colors[
@@ -110,11 +126,13 @@ const Home = () => {
     ];
   };
 
-  // 프로젝트 진행률 계산 (더미 데이터)
+  // 프로젝트 진행률 계산 (프로젝트별로 다른 값)
   const getProjectProgress = (project) => {
-    // 실제로는 프로젝트의 작업 통계를 기반으로 계산
-    const seed = project.prjNo || Math.random();
-    return Math.floor((seed.toString().charCodeAt(0) % 100) + 1);
+    // 완료된 프로젝트는 100%
+    if (isProjectCompleted(project)) {
+      return 100;
+    }
+    return project.avgProgress;
   };
 
   // 사용자 이름 안전하게 가져오기
@@ -131,23 +149,24 @@ const Home = () => {
   // 프로젝트 이름 안전하게 가져오기
   const getProjectName = (project) => {
     if (!project) return '프로젝트';
-    return project.prjName || project.projectName || '프로젝트';
+    return project.projectName || project.prjName || '프로젝트';
   };
 
   // 프로젝트 설명 안전하게 가져오기
   const getProjectDescription = (project) => {
     if (!project) return '';
     return (
-      project.prjDesc || project.projectContents || project.description || ''
+      project.projectContents || project.prjDesc || project.description || ''
     );
+  };
+
+  // 팀원 수 가져오기 (memCnt 필드 사용)
+  const getMemberCount = (project) => {
+    return project.memCnt || project.memberCount || 1;
   };
 
   const handleProjectClick = (projectId) => {
     navigate(`/project/${projectId}`);
-  };
-
-  const handleCreateProject = () => {
-    navigate('/my-workspace');
   };
 
   const getIconComponent = (iconName) => {
@@ -184,16 +203,10 @@ const Home = () => {
               오늘도 멋진 프로젝트를 만들어보세요.
             </p>
           </div>
-          <Button
-            onClick={handleCreateProject}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Plus className="w-4 h-4 mr-2" />새 프로젝트
-          </Button>
         </div>
 
-        {/* 통계 카드 섹션 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* 통계 카드 섹션 (즐겨찾기 제거) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="bg-white shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-center space-x-3">
@@ -241,25 +254,9 @@ const Home = () => {
               </div>
             </CardContent>
           </Card>
-
-          <Card className="bg-white shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-yellow-100 rounded-lg">
-                  <Star className="w-6 h-6 text-yellow-600" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {projectStats.favorites}
-                  </div>
-                  <div className="text-sm text-gray-500">즐겨찾기</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* 최근 프로젝트 섹션 - 새로운 디자인 */}
+        {/* 최근 프로젝트 섹션 */}
         <Card className="bg-white shadow-sm border border-gray-200">
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
@@ -287,19 +284,16 @@ const Home = () => {
                 <p className="text-gray-500 mb-4">
                   첫 번째 프로젝트를 만들어보세요!
                 </p>
-                <Button
-                  onClick={handleCreateProject}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  프로젝트 생성
-                </Button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {recentProjects.map((project) => {
                   const progress = getProjectProgress(project);
-                  const statusLabel = getProjectStatusLabel(project.prjStatus);
+                  const statusLabel = getProjectStatusLabel(
+                    project.projectStatus
+                  );
+                  const memberCount = getMemberCount(project);
+                  const projectColor = getProjectColor(project);
 
                   return (
                     <Card
@@ -311,17 +305,13 @@ const Home = () => {
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center space-x-3">
                             <div
-                              className={`w-4 h-4 ${getProjectColor(
-                                project
-                              )} rounded-full`}
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: projectColor }}
                             ></div>
                             <h3 className="font-bold text-lg text-gray-900 truncate">
                               {getProjectName(project)}
                             </h3>
                           </div>
-                          {project.isFavorite && (
-                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                          )}
                         </div>
 
                         <p className="text-sm text-gray-600 mb-4 line-clamp-2 leading-relaxed">
@@ -349,7 +339,7 @@ const Home = () => {
                           <div className="flex items-center justify-between">
                             <Badge
                               className={`text-xs px-3 py-1 font-medium rounded-full ${getProjectStatusColor(
-                                project.prjStatus
+                                project.projectStatus
                               )}`}
                             >
                               {statusLabel}
@@ -358,7 +348,7 @@ const Home = () => {
                             <div className="flex items-center space-x-1 text-gray-500">
                               <Users className="w-4 h-4" />
                               <span className="text-sm font-medium">
-                                {project.memberCount || 1}
+                                {memberCount}
                               </span>
                             </div>
                           </div>
@@ -371,215 +361,6 @@ const Home = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* 사이드바 섹션들을 하단으로 이동 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* 빠른 액세스 */}
-          <Card className="bg-white shadow-sm border border-gray-200">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                빠른 액세스
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button
-                variant="ghost"
-                className="w-full justify-start hover:bg-gray-50"
-                onClick={() => navigate('/my-tasks')}
-              >
-                <CheckCircle className="w-4 h-4 mr-3 text-green-600" />내 작업
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start hover:bg-gray-50"
-                onClick={() => navigate('/calendar')}
-              >
-                <Calendar className="w-4 h-4 mr-3 text-blue-600" />
-                캘린더
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start hover:bg-gray-50"
-                onClick={() => navigate('/reports')}
-              >
-                <TrendingUp className="w-4 h-4 mr-3 text-purple-600" />
-                보고서
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start hover:bg-gray-50"
-                onClick={() => navigate('/goals')}
-              >
-                <Target className="w-4 h-4 mr-3 text-orange-600" />
-                목표
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* 최근 활동 */}
-          <Card className="bg-white shadow-sm border border-gray-200">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                최근 활동
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {recentWorkHistory.length > 0 ? (
-                <div className="space-y-4">
-                  {recentWorkHistory.slice(0, 3).map((item) => {
-                    const IconComponent = getIconComponent(
-                      getWorkTypeIcon(item.workType)
-                    );
-                    const colorClass = getWorkTypeColor(item.workType);
-
-                    return (
-                      <div
-                        key={item.workHistNo}
-                        className="flex items-start space-x-3"
-                      >
-                        <div
-                          className={`w-2 h-2 ${
-                            colorClass.split(' ')[0]
-                          } rounded-full mt-2`}
-                        ></div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900">
-                            {item.workContent}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {getRelativeTime(item.workDate)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
-                        새 프로젝트 "모바일 앱 개발"이 생성되었습니다
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">2시간 전</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
-                        "UI 디자인" 작업이 완료되었습니다
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">4시간 전</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full mt-2"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
-                        팀 멤버 3명이 프로젝트에 참여했습니다
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">1일 전</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 알림 */}
-          <Card className="bg-white shadow-sm border border-gray-200">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-                <MessageCircle className="w-5 h-5 mr-2 text-blue-600" />
-                알림
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-6">
-                <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500">새로운 알림이 없습니다</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* 즐겨찾기 프로젝트 */}
-        {projectStats.favorites > 0 && (
-          <Card className="bg-white shadow-sm border border-gray-200">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-xl font-semibold text-gray-900 flex items-center">
-                <Star className="w-5 h-5 mr-2 text-yellow-600" />
-                즐겨찾기 프로젝트
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {projects
-                  .filter((p) => p.isFavorite)
-                  .slice(0, 3)
-                  .map((project) => {
-                    const progress = getProjectProgress(project);
-                    const statusLabel = getProjectStatusLabel(
-                      project.prjStatus
-                    );
-
-                    return (
-                      <Card
-                        key={project.prjNo}
-                        className="border border-gray-200 hover:shadow-md transition-all cursor-pointer hover:border-yellow-300"
-                        onClick={() => handleProjectClick(project.prjNo)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center space-x-2">
-                              <div
-                                className={`w-3 h-3 ${getProjectColor(
-                                  project
-                                )} rounded-full`}
-                              ></div>
-                              <h3 className="font-semibold text-gray-900 truncate">
-                                {getProjectName(project)}
-                              </h3>
-                            </div>
-                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                          </div>
-
-                          <div className="space-y-3">
-                            <div>
-                              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                <span>진행률</span>
-                                <span>{progress}%</span>
-                              </div>
-                              <Progress value={progress} className="h-1.5" />
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                              <Badge
-                                className={`text-xs px-2 py-1 ${getProjectStatusColor(
-                                  project.prjStatus
-                                )}`}
-                              >
-                                {statusLabel}
-                              </Badge>
-
-                              <div className="flex items-center space-x-1">
-                                <Users className="w-3 h-3 text-gray-400" />
-                                <span className="text-xs text-gray-500">
-                                  {project.memberCount || 1}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

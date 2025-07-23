@@ -1,364 +1,310 @@
+'use client';
+
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useParams } from 'react-router-dom';
+import { MessageCircle, X, Send, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { MessageCircle, Send, X, Maximize2, Minimize2 } from 'lucide-react';
 import {
+  fetchProjectChatroom,
   fetchMessages,
   sendMessage,
   updateReadMessageNo,
+  messageReceived,
+  setConnectionStatus,
+  clearUnreadCount,
 } from '@/store/slices/chatSlice';
-import { Client } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
 
 export default function FloatingChatWidget() {
+  const { projectId } = useParams();
   const dispatch = useDispatch();
-  const { messages, chatroom, loading, unreadCount } = useSelector(
+  const { chatroom, messages, unreadCount, loading, isConnected } = useSelector(
     (state) => state.chat
   );
-  const { currentProject } = useSelector((state) => state.project);
   const { currentUser } = useSelector((state) => state.auth);
+  const { currentProject } = useSelector((state) => state.project);
+
   const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [newMessage, setNewMessage] = useState('');
+  const [message, setMessage] = useState('');
+  const [stompClient, setStompClient] = useState(null);
   const messagesEndRef = useRef(null);
-  const stompClient = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
-  // 채팅방 열기/닫기
-  const toggleChat = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen) {
-      // 채팅방을 열 때 메시지 읽음 처리
-      markMessagesAsRead();
-    }
-  };
-
-  // 채팅방 확장/축소
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
-  };
-
-  // 메시지 읽음 처리
-  const markMessagesAsRead = () => {
-    if (chatroom?.chatroomNo && messages.length > 0) {
-      const lastMessageNo = messages[messages.length - 1].messageNo;
-      dispatch(
-        updateReadMessageNo({
-          projectId: currentProject.prjNo,
-          chatroomId: chatroom.chatroomNo,
-          userId: currentUser.userId,
-          readMessageNo: lastMessageNo,
-        })
-      );
-    }
-  };
-
-  // 메시지 스크롤 처리
+  // 메시지 스크롤 자동 이동
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // 메시지 전송
-  const handleSendMessage = () => {
-    if (!newMessage.trim() || !currentProject?.prjNo || !chatroom?.chatroomNo)
-      return;
-
-    const messageData = {
-      messageNo: `MSG${String(Date.now()).slice(-6)}`,
-      chatroomNo: chatroom.chatroomNo,
-      prjNo: currentProject.prjNo,
-      userId: currentUser.userId,
-      userName: currentUser.userName,
-      message: newMessage,
-      createDate: new Date().toISOString(),
-    };
-
-    // 웹소켓으로 메시지 전송
-    if (stompClient.current && stompClient.current.connected) {
-      stompClient.current.publish({
-        destination: `/pub/chat.message.${chatroom.chatroomNo}`,
-        body: JSON.stringify(messageData),
-      });
-    } else {
-      // 웹소켓 연결이 없는 경우 일반 API 호출
-      dispatch(sendMessage(messageData));
-    }
-
-    setNewMessage('');
-  };
-
-  // 메시지 날짜 포맷
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  // 사용자 정보 가져오기
-  const getMemberInfo = (userId) => {
-    return (
-      currentProject?.prjMemList?.find(
-        (m) => m.userId === userId && !m.deleteDate
-      ) || { userName: '알 수 없음' }
-    );
-  };
-
-  // 웹소켓 연결
   useEffect(() => {
-    if (currentProject?.prjNo && chatroom?.chatroomNo && isOpen) {
-      // 웹소켓 연결 설정
-      const socket = new SockJS('/ws-stomp'); // 서버의 웹소켓 엔드포인트
-      stompClient.current = new Client({
+    scrollToBottom();
+  }, [messages]);
+
+  // 프로젝트 채팅방 초기화
+  useEffect(() => {
+    if (projectId && currentUser) {
+      dispatch(fetchProjectChatroom(projectId));
+    }
+  }, [dispatch, projectId, currentUser]);
+
+  // 채팅방이 로드되면 메시지 가져오기
+  useEffect(() => {
+    if (chatroom?.chatroomNo) {
+      dispatch(fetchMessages({ chatroomNo: chatroom.chatroomNo }));
+    }
+  }, [dispatch, chatroom]);
+
+  // WebSocket 연결
+  const connectWebSocket = async () => {
+    if (!chatroom?.chatroomNo || !currentUser?.userId) return;
+
+    try {
+      // 동적 import로 SockJS와 STOMP 로드
+      const [SockJSModule, StompModule] = await Promise.all([
+        import('sockjs-client'),
+        import('@stomp/stompjs'),
+      ]);
+
+      const SockJS = SockJSModule.default || SockJSModule;
+      const { Client } = StompModule;
+
+      const socket = new SockJS('http://localhost:80/ws');
+      const client = new Client({
         webSocketFactory: () => socket,
-        debug: (str) => {
-          console.log(str);
-        },
+        debug: (str) => console.log('STOMP Debug:', str),
         reconnectDelay: 5000,
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
       });
 
-      // 연결 성공 시
-      stompClient.current.onConnect = () => {
-        console.log('STOMP 연결 성공');
+      client.onConnect = () => {
+        console.log('WebSocket 연결 성공');
+        dispatch(setConnectionStatus(true));
 
         // 채팅방 구독
-        stompClient.current.subscribe(
-          `/sub/chat.room.${chatroom.chatroomNo}`,
-          (message) => {
-            const receivedMessage = JSON.parse(message.body);
-
-            // Redux 상태 업데이트
-            dispatch({
-              type: 'chat/messageReceived',
-              payload: receivedMessage,
-            });
-
-            // 현재 채팅방이 열려있으면 자동으로 읽음 처리
-            if (isOpen && receivedMessage.userId !== currentUser.userId) {
-              dispatch(
-                updateReadMessageNo({
-                  projectId: currentProject.prjNo,
-                  chatroomId: chatroom.chatroomNo,
-                  userId: currentUser.userId,
-                  readMessageNo: receivedMessage.messageNo,
-                })
-              );
-            }
-          }
-        );
+        client.subscribe(`/sub/chat.room.${chatroom.chatroomNo}`, (message) => {
+          const receivedMessage = JSON.parse(message.body);
+          console.log('메시지 수신:', receivedMessage);
+          dispatch(messageReceived(receivedMessage));
+        });
       };
 
-      // 에러 처리
-      stompClient.current.onStompError = (frame) => {
-        console.error('STOMP 에러:', frame);
+      client.onDisconnect = () => {
+        console.log('WebSocket 연결 해제');
+        dispatch(setConnectionStatus(false));
       };
 
-      // 연결 시작
-      stompClient.current.activate();
-
-      // 컴포넌트 언마운트 시 연결 해제
-      return () => {
-        if (stompClient.current) {
-          stompClient.current.deactivate();
+      client.onStompError = (frame) => {
+        console.error('STOMP 에러:', frame.headers['message']);
+        dispatch(setConnectionStatus(false));
+        // 재연결 시도
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
         }
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectWebSocket();
+        }, 5000);
       };
-    }
-  }, [
-    currentProject?.prjNo,
-    chatroom?.chatroomNo,
-    isOpen,
-    dispatch,
-    currentUser.userId,
-  ]);
 
-  // 메시지 로드
+      client.activate();
+      setStompClient(client);
+    } catch (error) {
+      console.error('WebSocket 연결 실패:', error);
+      dispatch(setConnectionStatus(false));
+    }
+  };
+
+  // 채팅창 열기/닫기
+  const toggleChat = () => {
+    setIsOpen(!isOpen);
+    if (!isOpen) {
+      // 채팅창을 열 때
+      if (!stompClient || !stompClient.connected) {
+        connectWebSocket();
+      }
+      // 읽지 않은 메시지 수 초기화
+      if (unreadCount > 0 && chatroom?.chatroomNo) {
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage) {
+          dispatch(
+            updateReadMessageNo({
+              chatroomNo: chatroom.chatroomNo,
+              readMessageNo: lastMessage.messageNo,
+              userId: currentUser.userId,
+            })
+          );
+        }
+        dispatch(clearUnreadCount());
+      }
+    }
+  };
+
+  // 메시지 전송
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!message.trim() || !chatroom) return;
+
+    const messageData = {
+      chatroomNo: chatroom.chatroomNo,
+      prjNo: currentProject?.prjNo || projectId,
+      userId: currentUser.userId,
+      message: message.trim(),
+    };
+
+    console.log('전송할 메시지 데이터:', messageData);
+
+    try {
+      // WebSocket으로 전송 시도
+      if (stompClient && stompClient.connected) {
+        stompClient.publish({
+          destination: `/pub/chat.message.${chatroom.chatroomNo}`,
+          body: JSON.stringify(messageData),
+        });
+        setMessage('');
+      } else {
+        // WebSocket 연결이 없으면 HTTP API 사용
+        console.log('WebSocket 연결 없음, HTTP API 사용');
+        await dispatch(sendMessage(messageData)).unwrap();
+        setMessage('');
+      }
+    } catch (error) {
+      console.error('메시지 전송 실패:', error);
+      // WebSocket 실패 시 HTTP API로 재시도
+      try {
+        await dispatch(sendMessage(messageData)).unwrap();
+        setMessage('');
+      } catch (httpError) {
+        console.error('HTTP API 메시지 전송도 실패:', httpError);
+      }
+    }
+  };
+
+  // 컴포넌트 언마운트 시 WebSocket 연결 해제
   useEffect(() => {
-    if (currentProject?.prjNo && chatroom?.chatroomNo) {
-      dispatch(
-        fetchMessages({
-          projectId: currentProject.prjNo,
-          chatroomId: chatroom.chatroomNo,
-        })
-      );
-    }
-  }, [dispatch, currentProject?.prjNo, chatroom?.chatroomNo]);
+    return () => {
+      if (stompClient) {
+        stompClient.deactivate();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [stompClient]);
 
-  // 메시지 스크롤
-  useEffect(() => {
-    if (isOpen) {
-      scrollToBottom();
-    }
-  }, [messages, isOpen]);
-
-  // 채팅방이 없는 경우
-  if (!chatroom) {
-    return null;
-  }
+  // 프로젝트 상세 페이지가 아니면 렌더링하지 않음
+  if (!projectId) return null;
 
   return (
-    <div
-      className={`fixed bottom-6 right-6 z-50 flex flex-col ${
-        isExpanded ? 'w-80 h-[70vh]' : 'w-72 h-[400px]'
-      }`}
-    >
-      {/* 채팅 버튼 (닫혀있을 때) */}
-      {!isOpen && (
+    <>
+      {/* 플로팅 채팅 버튼 */}
+      <div className="fixed bottom-6 right-6 z-50">
         <Button
           onClick={toggleChat}
-          className="rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg p-4 h-14 w-14 flex items-center justify-center relative"
+          className="relative h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg"
+          size="icon"
         >
           <MessageCircle className="h-6 w-6 text-white" />
           {unreadCount > 0 && (
-            <Badge className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full px-2 py-0.5 text-xs font-bold">
-              {unreadCount}
+            <Badge className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+              {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
           )}
         </Button>
-      )}
+      </div>
 
-      {/* 채팅 위젯 (열려있을 때) */}
+      {/* 채팅 창 */}
       {isOpen && (
-        <div
-          className={`flex flex-col bg-gray-900 rounded-lg shadow-xl overflow-hidden transition-all duration-200 ease-in-out h-full`}
-        >
+        <div className="fixed bottom-24 right-6 w-80 h-96 bg-white rounded-lg shadow-xl border z-50 flex flex-col">
           {/* 채팅 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
-            <div className="flex items-center space-x-2">
-              <MessageCircle className="h-5 w-5 text-blue-400" />
-              <span className="font-medium text-white">
-                {chatroom.chatroomName || '프로젝트 채팅'}
-              </span>
-              {unreadCount > 0 && (
-                <Badge className="bg-red-500 text-white rounded-full px-2 py-0.5 text-xs">
-                  {unreadCount}
-                </Badge>
+          <div className="flex items-center justify-between p-4 border-b bg-blue-600 text-white rounded-t-lg">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sm">
+                {chatroom?.chatroomName ||
+                  `${currentProject?.prjName || '프로젝트'} 채팅`}
+              </h3>
+              {isConnected ? (
+                <Wifi className="h-4 w-4 text-green-300" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-red-300" />
               )}
             </div>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-gray-300 hover:text-white hover:bg-gray-700 p-1 h-8 w-8"
-                onClick={toggleExpand}
-              >
-                {isExpanded ? (
-                  <Minimize2 className="h-4 w-4" />
-                ) : (
-                  <Maximize2 className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-gray-300 hover:text-white hover:bg-gray-700 p-1 h-8 w-8"
-                onClick={toggleChat}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button
+              onClick={toggleChat}
+              variant="ghost"
+              size="sm"
+              className="text-white hover:bg-blue-700"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
 
-          {/* 채팅 메시지 영역 */}
-          <div className="flex-1 p-4 overflow-y-auto bg-gray-900">
+          {/* 메시지 영역 */}
+          <ScrollArea className="flex-1 p-4">
             {loading ? (
               <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <MessageCircle className="h-12 w-12 mb-2 opacity-50" />
-                <p>아직 메시지가 없습니다</p>
-                <p className="text-sm">첫 메시지를 보내보세요!</p>
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {messages.map((msg, index) => {
-                  const isCurrentUser = msg.userId === currentUser.userId;
-                  const senderInfo = getMemberInfo(msg.userId);
-                  const prevMsg = messages[index - 1];
-                  const showSenderInfo =
-                    !prevMsg ||
-                    prevMsg.userId !== msg.userId ||
-                    new Date(msg.createDate).getTime() -
-                      new Date(prevMsg.createDate).getTime() >
-                      5 * 60 * 1000;
-
-                  return (
+              <div className="space-y-3">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.messageNo}
+                    className={`flex ${
+                      msg.userId === currentUser?.userId
+                        ? 'justify-end'
+                        : 'justify-start'
+                    }`}
+                  >
                     <div
-                      key={msg.messageNo}
-                      className={`flex ${
-                        isCurrentUser ? 'justify-end' : 'justify-start'
+                      className={`max-w-[70%] px-3 py-2 rounded-lg text-sm ${
+                        msg.userId === currentUser?.userId
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
                       }`}
                     >
-                      {!isCurrentUser && showSenderInfo && (
-                        <Avatar className="w-8 h-8 mr-2 flex-shrink-0">
-                          <AvatarFallback className="bg-gray-700 text-gray-200">
-                            {senderInfo.userName?.charAt(0) || '?'}
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-                      <div
-                        className={`flex flex-col ${
-                          isCurrentUser ? 'items-end' : 'items-start'
-                        }`}
-                      >
-                        {showSenderInfo && !isCurrentUser && (
-                          <span className="text-xs text-gray-400 mb-1">
-                            {senderInfo.userName || '알 수 없음'}
-                          </span>
-                        )}
-                        <div
-                          className={`px-3 py-2 rounded-lg max-w-[80%] break-words ${
-                            isCurrentUser
-                              ? 'bg-blue-600 text-white rounded-br-none'
-                              : 'bg-gray-700 text-white rounded-bl-none'
-                          }`}
-                        >
-                          {msg.message}
+                      {msg.userId !== currentUser?.userId && (
+                        <div className="text-xs opacity-70 mb-1">
+                          {msg.userId}
                         </div>
-                        <span className="text-xs text-gray-500 mt-1">
-                          {formatDate(msg.createDate)}
-                        </span>
+                      )}
+                      <div>{msg.message}</div>
+                      <div className="text-xs opacity-70 mt-1">
+                        {new Date(msg.createDate).toLocaleTimeString('ko-KR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
                 <div ref={messagesEndRef} />
               </div>
             )}
-          </div>
+          </ScrollArea>
 
           {/* 메시지 입력 영역 */}
-          <div className="p-3 bg-gray-800 border-t border-gray-700">
-            <div className="flex items-center space-x-2">
+          <form onSubmit={handleSendMessage} className="p-4 border-t">
+            <div className="flex gap-2">
               <Input
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="메시지 입력..."
-                className="flex-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="메시지를 입력하세요..."
+                className="flex-1"
+                disabled={loading}
               />
               <Button
-                onClick={handleSendMessage}
-                disabled={!newMessage.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                type="submit"
+                size="sm"
+                disabled={!message.trim() || loading}
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
-          </div>
+          </form>
         </div>
       )}
-    </div>
+    </>
   );
 }

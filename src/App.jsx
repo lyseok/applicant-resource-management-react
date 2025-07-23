@@ -14,6 +14,7 @@ import Dashboard from './components/Dashboard';
 import Calendar from './components/Calendar';
 import ProjectBoard from './components/ProjectBoard';
 import ChatRoom from './components/ChatRoom';
+import AdminDashboard from './components/AdminDashboard';
 
 function App() {
   return (
@@ -35,7 +36,8 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="bulletin" element={<ProjectBoard />} />
-          <Route path="chat" element={<ChatRoom />} />{' '}
+          <Route path="chat" element={<ChatRoom />} />
+          <Route path="admin" element={<AdminDashboard />} />
         </Route>
       </Routes>
     </Layout>

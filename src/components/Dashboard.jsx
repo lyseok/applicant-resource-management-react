@@ -22,7 +22,6 @@ import {
   AlertCircle,
   Target,
   Users,
-  Calendar,
   Activity,
 } from 'lucide-react';
 import WorkHistoryPanel from './WorkHistoryPanel';
@@ -308,58 +307,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* 작업 내역 추적 */}
-          <WorkHistoryPanel />
+          {/* 작업 내역 추적 - projectId 전달 */}
+          <WorkHistoryPanel projectId={currentProject?.prjNo || 'PRJT000008'} />
         </div>
-
-        {/* 최근 활동 */}
-        <Card className="bg-white shadow-sm border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              최근 활동
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {tasks.slice(0, 4).map((task, index) => (
-                <div key={task.taskNo} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">
-                      <span className="font-medium">{task.taskName}</span>
-                      {task.taskStatus === 'COMPLETED'
-                        ? ' 작업이 완료되었습니다'
-                        : ' 작업이 생성되었습니다'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {task.dueDate
-                        ? `마감일: ${task.dueDate.slice(
-                            4,
-                            6
-                          )}월 ${task.dueDate.slice(6, 8)}일`
-                        : '방금 전'}
-                    </p>
-                  </div>
-                  <Badge
-                    className={`text-xs ${
-                      task.taskStatus === 'COMPLETED'
-                        ? 'bg-green-100 text-green-800 border-green-200'
-                        : task.taskStatus === 'IN_PROGRESS'
-                        ? 'bg-orange-100 text-orange-800 border-orange-200'
-                        : 'bg-blue-100 text-blue-800 border-blue-200'
-                    }`}
-                  >
-                    {task.taskStatus === 'COMPLETED'
-                      ? '완료'
-                      : task.taskStatus === 'IN_PROGRESS'
-                      ? '진행중'
-                      : '대기'}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

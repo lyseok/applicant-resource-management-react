@@ -3,9 +3,9 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Star, Plus, Users, Settings } from 'lucide-react';
+import { Star, Plus, Users, Settings, Shield } from 'lucide-react';
 import ProjectMemberModal from './ProjectMemberModal';
-import ProjectSettingsModal from './ProjectSettingsModal'; // Import ProjectSettingsModal
+import ProjectSettingsModal from './ProjectSettingsModal';
 import { toggleProjectFavorite } from '@/store/slices/projectSlice';
 
 const ALL_TABS = [
@@ -16,7 +16,8 @@ const ALL_TABS = [
   { id: 'dashboard', label: '대시보드', path: '/dashboard' },
   { id: 'calendar', label: '캘린더', path: '/calendar' },
   { id: 'bulletin', label: '게시판', path: '/bulletin' },
-  { id: 'chat', label: '채팅', path: '/chat' }, // New chat tab
+  { id: 'chat', label: '채팅', path: '/chat' },
+  { id: 'admin', label: '관리', path: '/admin', adminOnly: true }, // 관리자 전용 탭
 ];
 
 export default function ProjectHeader() {
@@ -25,13 +26,12 @@ export default function ProjectHeader() {
   const { projectId } = useParams();
   const dispatch = useDispatch();
   const { currentProject } = useSelector((state) => state.project);
+  const { currentUser } = useSelector((state) => state.auth);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false); // New state for settings modal
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const getCurrentTab = () => {
     const path = location.pathname;
-
-    // Find the tab that matches the current path
     const matchedTab = ALL_TABS.find((tab) => {
       const fullPath = `/project/${projectId}${tab.path}`;
       return (
@@ -39,8 +39,7 @@ export default function ProjectHeader() {
         (tab.path === '' && path === `/project/${projectId}`)
       );
     });
-
-    return matchedTab ? matchedTab.id : 'overview'; // Default to overview
+    return matchedTab ? matchedTab.id : 'overview';
   };
 
   const handleTabChange = (tabId) => {
@@ -57,6 +56,23 @@ export default function ProjectHeader() {
     }
   };
 
+  // 관리자 권한 체크 (OWNER 또는 MANAGER)
+  const isAdmin = currentProject?.prjMemList?.some(
+    (member) =>
+      member.userId === (currentUser?.userId || currentUser?.username) &&
+      (member.authorityCode === 'OWNER' ||
+        member.authorityCode === 'MANAGER') &&
+      member.deleteDate === null
+  );
+
+  // OWNER 권한 체크
+  const isOwner = currentProject?.prjMemList?.some(
+    (member) =>
+      member.userId === (currentUser?.userId || currentUser?.username) &&
+      member.authorityCode === 'OWNER' &&
+      member.deleteDate === null
+  );
+
   if (!currentProject) {
     return (
       <div className="bg-white border-b border-gray-200 shadow-sm">
@@ -71,13 +87,13 @@ export default function ProjectHeader() {
 
   const currentTab = getCurrentTab();
   const visibleTabs =
-    currentProject.visibleTabs || ALL_TABS.map((tab) => tab.id); // Get visible tabs from project state
-  const filteredTabs = ALL_TABS.filter((tab) => visibleTabs.includes(tab.id)); // Filter tabs based on visibility
+    currentProject.visibleTabs || ALL_TABS.map((tab) => tab.id);
 
-  // Check if current user is owner
-  const isOwner = currentProject.members?.some(
-    (member) => member.userId === 'USER001' && member.authorityCode === 'OWNER'
-  ); // Assuming USER001 is the current user
+  // 관리자가 아닌 경우 관리 탭 제외
+  const filteredTabs = ALL_TABS.filter((tab) => {
+    if (tab.adminOnly && !isAdmin) return false;
+    return visibleTabs.includes(tab.id);
+  });
 
   return (
     <div className="bg-white border-b border-gray-200 shadow-sm">
@@ -101,6 +117,12 @@ export default function ProjectHeader() {
                 }`}
               />
             </Button>
+            {isAdmin && (
+              <Badge className="bg-purple-100 text-purple-800 border-purple-200 px-2 py-1 text-xs">
+                <Shield className="w-3 h-3 mr-1" />
+                관리자
+              </Badge>
+            )}
           </div>
           <div className="flex items-center space-x-3">
             <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 px-3 py-1">
@@ -115,14 +137,11 @@ export default function ProjectHeader() {
               <Users className="w-4 h-4 mr-2" />
               멤버 ({currentProject.prjMemList?.length || 0})
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 font-medium rounded-lg transition-colors">
-              공유
-            </Button>
-            {isOwner && ( // Only show settings button to owner
+            {isAdmin && (
               <Button
                 variant="outline"
                 className="px-4 py-2 font-medium rounded-lg border-gray-300 hover:bg-gray-50 transition-colors bg-transparent"
-                onClick={() => setIsSettingsModalOpen(true)} // Open settings modal
+                onClick={() => setIsSettingsModalOpen(true)}
               >
                 <Settings className="w-4 h-4 mr-2" />
                 설정
@@ -136,13 +155,14 @@ export default function ProjectHeader() {
           {filteredTabs.map((tab) => (
             <button
               key={tab.id}
-              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-all duration-200 ${
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-all duration-200 flex items-center ${
                 currentTab === tab.id
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
               onClick={() => handleTabChange(tab.id)}
             >
+              {tab.id === 'admin' && <Shield className="w-4 h-4 mr-1" />}
               {tab.label}
             </button>
           ))}
@@ -163,12 +183,13 @@ export default function ProjectHeader() {
         project={currentProject}
       />
 
-      {/* 프로젝트 설정 모달 */}
-      {isOwner && ( // Only render settings modal if current user is owner
+      {/* 프로젝트 설정 모달 - 관리자도 접근 가능 */}
+      {isAdmin && (
         <ProjectSettingsModal
           isOpen={isSettingsModalOpen}
           onClose={() => setIsSettingsModalOpen(false)}
           project={currentProject}
+          isOwner={isOwner}
         />
       )}
     </div>

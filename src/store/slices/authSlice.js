@@ -43,7 +43,7 @@ export const logout = createAsyncThunk(
       location.href = BASE_REDIRECT_URL;
       return null;
     } catch (error) {
-      // 로그아웃 API 실패해도 클라이언트 상태는 초기화
+      // 로그아웃 API 실패해도 ���라이언트 상태는 초기화
       console.error('로그아웃 API 실패:', error);
       location.href = BASE_REDIRECT_URL;
       return null;

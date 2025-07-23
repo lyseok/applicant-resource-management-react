@@ -33,14 +33,7 @@ export default function Sidebar() {
 
   const menuItems = [
     { id: '/', label: '홈', icon: Home },
-    { id: '/tasks', label: '내 작업', icon: CheckSquare },
     { id: '/inbox', label: '수신함', icon: Inbox, badge: 1 },
-  ];
-
-  const teamSiteItems = [
-    { id: '/reports', label: '보고서', icon: BarChart3 },
-    { id: '/portfolio', label: '포트폴리오', icon: Briefcase },
-    { id: '/goals', label: '목표', icon: Target },
   ];
 
   const getProjectColor = (project) => {
@@ -64,7 +57,7 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-gray-900 text-white h-screen flex flex-col shadow-xl">
       {/* 헤더 */}
-      <div className="p-4 border-b border-gray-700">
+      {/* <div className="p-4 border-b border-gray-700">
         <Button
           className="w-full bg-violet-600 hover:bg-violet-800 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
           onClick={() => setIsCreateModalOpen(true)}
@@ -72,7 +65,7 @@ export default function Sidebar() {
           <Plus className="w-4 h-4 mr-2" />
           생성
         </Button>
-      </div>
+      </div> */}
 
       {/* 메인 메뉴 */}
       <div className="flex-1 overflow-y-auto">
@@ -103,48 +96,12 @@ export default function Sidebar() {
           })}
         </div>
 
-        {/* 팀사이트 섹션 */}
-        <div className="px-2 py-4">
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">
-            팀사이트
-          </div>
-          <div className="space-y-1">
-            {teamSiteItems.map((item) => {
-              const IconComponent = item.icon;
-              const isActive = location.pathname === item.id;
-              return (
-                <Button
-                  key={item.id}
-                  variant="ghost"
-                  className={`w-full justify-start py-2 px-3 text-left font-normal transition-all duration-200 ${
-                    isActive
-                      ? 'bg-gray-800 text-white shadow-sm'
-                      : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                  }`}
-                  onClick={() => navigate(item.id)}
-                >
-                  <IconComponent className="w-4 h-4 mr-3 flex-shrink-0" />
-                  {item.label}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* 프로젝트 섹션 */}
         <div className="px-2 py-4">
           <div className="flex items-center justify-between mb-3 px-2">
             <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
               프로젝트
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="p-1 hover:bg-gray-800 rounded"
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              <Plus className="w-4 h-4 text-gray-400" />
-            </Button>
           </div>
 
           <div className="space-y-1">
@@ -190,10 +147,10 @@ export default function Sidebar() {
       </div>
 
       {/* 프로젝트 생성 모달 */}
-      <CreateProjectModal
+      {/* <CreateProjectModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-      />
+      /> */}
     </div>
   );
 }
