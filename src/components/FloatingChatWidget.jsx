@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
@@ -38,10 +36,6 @@ export default function FloatingChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   // 프로젝트 채팅방 초기화
   useEffect(() => {
     if (projectId && currentUser) {
@@ -70,7 +64,7 @@ export default function FloatingChatWidget() {
       const SockJS = SockJSModule.default || SockJSModule;
       const { Client } = StompModule;
 
-      const socket = new SockJS('http://localhost:80/ws');
+      const socket = new SockJS('http://localhost:8080/ws');
       const client = new Client({
         webSocketFactory: () => socket,
         debug: (str) => console.log('STOMP Debug:', str),
@@ -84,11 +78,14 @@ export default function FloatingChatWidget() {
         dispatch(setConnectionStatus(true));
 
         // 채팅방 구독
-        client.subscribe(`/sub/chat.room.${chatroom.chatroomNo}`, (message) => {
-          const receivedMessage = JSON.parse(message.body);
-          console.log('메시지 수신:', receivedMessage);
-          dispatch(messageReceived(receivedMessage));
-        });
+        client.subscribe(
+          `/topic/chatroom/${chatroom.chatroomNo}`,
+          (message) => {
+            const receivedMessage = JSON.parse(message.body);
+            console.log('메시지 수신:', receivedMessage);
+            dispatch(messageReceived(receivedMessage));
+          }
+        );
       };
 
       client.onDisconnect = () => {
@@ -159,7 +156,7 @@ export default function FloatingChatWidget() {
       // WebSocket으로 전송 시도
       if (stompClient && stompClient.connected) {
         stompClient.publish({
-          destination: `/pub/chat.message.${chatroom.chatroomNo}`,
+          destination: '/app/chat.sendMessage',
           body: JSON.stringify(messageData),
         });
         setMessage('');
@@ -193,8 +190,18 @@ export default function FloatingChatWidget() {
     };
   }, [stompClient]);
 
+  // 메시지 스크롤 자동 이동
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   // 프로젝트 상세 페이지가 아니면 렌더링하지 않음
   if (!projectId) return null;
+
+  // COMPANY 타입 사용자는 채팅 기능 사용 불가
+  if (!currentUser || currentUser.userType === 'COMPANY') {
+    return null;
+  }
 
   return (
     <>

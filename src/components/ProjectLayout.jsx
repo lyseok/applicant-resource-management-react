@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect } from 'react';
 import { useParams, Outlet } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
