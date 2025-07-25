@@ -11,59 +11,72 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { X, Check, Trash2, ChevronDown, Plus, Bell } from 'lucide-react';
 import {
-  X,
-  Check,
-  ThumbsUp,
-  Paperclip,
-  Share2,
-  Link,
-  Maximize2,
-  MoreHorizontal,
-  ChevronDown,
-  Plus,
-  Bell,
-} from 'lucide-react';
-import { createTask, updateTask } from '@/store/slices/taskSlice';
+  createTaskAsync,
+  updateTaskAsync,
+  deleteTaskAsync,
+  closeTaskPanel,
+} from '@/store/slices/taskSlice';
 
-export default function TaskPanel({ isOpen, onClose, task }) {
+export default function TaskPanel({ isOpen, task }) {
   const dispatch = useDispatch();
   const { tasks, loading } = useSelector((state) => state.tasks);
   const { currentProject } = useSelector((state) => state.project);
+  const { user } = useSelector((state) => state.auth);
 
   const [taskName, setTaskName] = useState('');
-  const [userId, setUserId] = useState('USER001');
+  const [userId, setUserId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [priorityCode, setPriorityCode] = useState('MEDIUM');
-  const [taskStatus, setTaskStatus] = useState('TODO');
+  const [priorityCode, setPriorityCode] = useState('PCOD002');
+  const [taskStatus, setTaskStatus] = useState('PEND-001');
   const [detailContent, setDetailContent] = useState('');
-  const [comment, setComment] = useState('');
   const [progressRate, setProgressRate] = useState('0');
   const [upperTaskNo, setUpperTaskNo] = useState('');
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // 활성 멤버만 필터링 (deleteDate가 null인 멤버)
+  const activeMembers =
+    currentProject?.prjMemList?.filter(
+      (member) => member.deleteDate === null
+    ) || [];
 
   // task가 변경될 때마다 폼 데이터 업데이트
   useEffect(() => {
     if (task) {
       setTaskName(task.taskName || '');
-      setUserId(task.userId || 'USER001');
+      setUserId(task.userId || '');
       setDueDate(task.dueDate || '');
       setStartDate(task.startDate || '');
-      setPriorityCode(task.priorityCode || 'MEDIUM');
-      setTaskStatus(task.taskStatus || 'TODO');
+      setPriorityCode(task.priorityCode || 'PCOD002');
+      setTaskStatus(task.taskStatus || 'PEND-001');
       setDetailContent(task.detailContent || '');
       setProgressRate(task.progressRate || '0');
       setUpperTaskNo(task.upperTaskNo || '');
+    } else {
+      // 새 작업일 때 초기화
+      setTaskName('');
+      setUserId('');
+      setDueDate('');
+      setStartDate('');
+      setPriorityCode('PCOD002');
+      setTaskStatus('PEND-001');
+      setDetailContent('');
+      setProgressRate('0');
+      setUpperTaskNo('');
     }
   }, [task]);
 
   const handleSave = async () => {
+    if (!taskName.trim()) return;
+
     const taskData = {
       taskName,
-      prjNo: currentProject.prjNo,
+      prjNo: currentProject?.prjNo,
       userId,
-      sectNo: 'SECT001',
-      creatorId: 'USER001',
+      creatorId: user?.userId,
       dueDate,
       startDate,
       priorityCode,
@@ -71,49 +84,138 @@ export default function TaskPanel({ isOpen, onClose, task }) {
       detailContent,
       progressRate,
       upperTaskNo: upperTaskNo || null,
-      deleteDate: null,
-      deleteUserId: null,
     };
 
     try {
       if (task?.taskNo) {
-        // 기존 작업 업데이트
+        // 기존 작업 업데이트 - taskNo를 정확히 전달
         await dispatch(
-          updateTask({
-            id: task.taskNo,
+          updateTaskAsync({
+            taskId: task.taskNo, // task.taskNo를 taskId로 전달
             taskData: { ...taskData, taskNo: task.taskNo },
           })
         ).unwrap();
       } else {
         // 새 작업 생성
-        const newTaskNo = `TASK${String(tasks.length + 1).padStart(3, '0')}`;
-        await dispatch(createTask({ ...taskData, taskNo: newTaskNo })).unwrap();
+        await dispatch(createTaskAsync(taskData)).unwrap();
       }
-      onClose();
+
+      // 성공 메시지 표시
+      setShowSuccessMessage(true);
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+        dispatch(closeTaskPanel());
+      }, 1500);
     } catch (error) {
       console.error('작업 저장 실패:', error);
     }
   };
 
+  const handleDelete = async () => {
+    if (!task?.taskNo) return;
+
+    try {
+      await dispatch(deleteTaskAsync(task.taskNo)).unwrap();
+
+      // 성공 메시지 표시
+      setShowSuccessMessage(true);
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+        dispatch(closeTaskPanel());
+      }, 1500);
+    } catch (error) {
+      console.error('작업 삭제 실패:', error);
+    }
+  };
+
   const handleMarkComplete = () => {
     const newProgressRate = progressRate === '100' ? '0' : '100';
-    const newStatus = newProgressRate === '100' ? 'COMPLETED' : 'TODO';
+    const newStatus = newProgressRate === '100' ? 'PEND-003' : 'PEND-001';
     setProgressRate(newProgressRate);
     setTaskStatus(newStatus);
   };
 
+  const handleClose = () => {
+    dispatch(closeTaskPanel());
+  };
+
+  // 담당자 변경 핸들러 - UI 즉시 업데이트
+  const handleAssigneeChange = (newUserId) => {
+    console.log('Assignee changed to:', newUserId);
+    setUserId(newUserId === 'none' ? '' : newUserId);
+  };
+
   const availableTasks = tasks.filter((t) => t.taskNo !== task?.taskNo);
+
+  // 담당자 정보 가져오기
+  const getAssigneeInfo = (userId) => {
+    if (!userId) return null;
+
+    // API 응답에서 prjMem 객체 사용
+    if (task?.prjMem && task.prjMem.userName && task.prjMem.userId === userId) {
+      return {
+        userName: task.prjMem.userName,
+        userEmail: task.prjMem.userEmail || '',
+      };
+    }
+
+    // 활성 멤버에서 찾기
+    const member = activeMembers.find((m) => m.userId === userId);
+    return member || { userName: '미지정', userEmail: '' };
+  };
 
   if (!isOpen) return null;
 
   const isNewTask = !task?.taskNo;
+  const assigneeInfo = userId ? getAssigneeInfo(userId) : null;
 
   return (
     <>
+      {/* 성공 메시지 */}
+      {showSuccessMessage && (
+        <div className="fixed top-4 right-4 z-[60] bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2">
+          <Check className="w-5 h-5" />
+          <span className="font-medium">
+            {isNewTask ? '작업이 생성되었습니다!' : '저장이 완료되었습니다!'}
+          </span>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold mb-4">작업 삭제</h3>
+            <p className="text-gray-600 mb-6">
+              이 작업을 삭제하시겠습니까? 삭제된 작업은 복구할 수 없습니다.
+            </p>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1"
+              >
+                취소
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  handleDelete();
+                }}
+                className="flex-1"
+              >
+                삭제
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 오버레이 */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* 사이드 패널 */}
@@ -121,71 +223,44 @@ export default function TaskPanel({ isOpen, onClose, task }) {
         {/* 헤더 */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
           <div className="flex items-center justify-between mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className={`border-gray-300 hover:bg-gray-50 font-medium rounded-lg ${
-                progressRate === '100'
-                  ? 'bg-green-100 text-green-800 border-green-300'
-                  : 'bg-transparent'
-              }`}
-              onClick={handleMarkComplete}
-            >
-              <Check className="w-4 h-4 mr-2" />
-              {progressRate === '100' ? '완료됨' : '완료로 표시'}
-            </Button>
             <div className="flex items-center space-x-2">
+              {/* 완료됨 버튼 */}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className={`border-gray-300 hover:bg-gray-50 font-medium rounded-lg ${
+                  progressRate === '100'
+                    ? 'bg-green-100 text-green-800 border-green-300'
+                    : 'bg-transparent'
+                }`}
+                onClick={handleMarkComplete}
               >
-                <ThumbsUp className="w-4 h-4 text-gray-600" />
+                <Check className="w-4 h-4 mr-2" />
+                {progressRate === '100' ? '완료됨' : '완료로 표시'}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Paperclip className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Share2 className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Link className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Maximize2 className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <MoreHorizontal className="w-4 h-4 text-gray-600" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-                onClick={onClose}
-              >
-                <X className="w-4 h-4 text-gray-600" />
-              </Button>
+
+              {/* 삭제 버튼 - 기존 작업에만 표시 */}
+              {!isNewTask && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-2 hover:bg-red-50 hover:text-red-600 rounded-lg"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              )}
             </div>
+
+            {/* 닫기 버튼 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-2 hover:bg-gray-100 rounded-lg"
+              onClick={handleClose}
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </Button>
           </div>
         </div>
 
@@ -205,17 +280,50 @@ export default function TaskPanel({ isOpen, onClose, task }) {
             />
           </div>
 
-          {/* 담당자 */}
+          {/* 담당자 선택 */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">담당자</label>
-            <div className="flex items-center space-x-3">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-yellow-500 text-white text-sm font-medium">
-                  미문
-                </AvatarFallback>
-              </Avatar>
-              <span className="font-medium">미문</span>
-            </div>
+            <Select
+              value={userId || 'none'}
+              onValueChange={handleAssigneeChange}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="담당자를 선택하세요">
+                  {assigneeInfo ? (
+                    <div className="flex items-center space-x-2">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
+                          {assigneeInfo.userName?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm">{assigneeInfo.userName}</span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500">담당자 미지정</span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">담당자 미지정</SelectItem>
+                {activeMembers.map((member) => (
+                  <SelectItem key={member.userId} value={member.userId}>
+                    <div className="flex items-center space-x-2">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
+                          {member.userName?.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium">{member.userName}</div>
+                        <div className="text-xs text-gray-500">
+                          {member.userPosition || '직책 없음'}
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* 시작일과 마감일 */}
@@ -261,7 +369,7 @@ export default function TaskPanel({ isOpen, onClose, task }) {
               <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                 <span className="text-sm font-medium">
-                  {currentProject.name}
+                  {currentProject?.projectName}
                 </span>
                 <Select value={taskStatus} onValueChange={setTaskStatus}>
                   <SelectTrigger className="w-auto border-none shadow-none p-0 h-auto">
@@ -269,9 +377,9 @@ export default function TaskPanel({ isOpen, onClose, task }) {
                     <ChevronDown className="w-4 h-4 ml-1" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="TODO">할 일</SelectItem>
-                    <SelectItem value="IN_PROGRESS">진행 중</SelectItem>
-                    <SelectItem value="COMPLETED">완료</SelectItem>
+                    <SelectItem value="PEND-001">할 일</SelectItem>
+                    <SelectItem value="PEND-002">진행 중</SelectItem>
+                    <SelectItem value="PEND-003">완료</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -317,9 +425,9 @@ export default function TaskPanel({ isOpen, onClose, task }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="LOW">낮음</SelectItem>
-                    <SelectItem value="MEDIUM">중간</SelectItem>
-                    <SelectItem value="HIGH">높음</SelectItem>
+                    <SelectItem value="PCOD003">낮음</SelectItem>
+                    <SelectItem value="PCOD002">중간</SelectItem>
+                    <SelectItem value="PCOD001">높음</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -328,14 +436,17 @@ export default function TaskPanel({ isOpen, onClose, task }) {
                   <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                   <span className="text-sm text-gray-700">진척도</span>
                 </div>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={progressRate}
-                  onChange={(e) => setProgressRate(e.target.value)}
-                  className="w-20 text-right"
-                />
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={progressRate}
+                    onChange={(e) => setProgressRate(e.target.value)}
+                    className="w-16 text-right text-sm"
+                  />
+                  <span className="text-sm text-gray-500">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -361,25 +472,6 @@ export default function TaskPanel({ isOpen, onClose, task }) {
               하위 작업 추가
             </Button>
           </div>
-
-          {/* 댓글 입력 */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-3">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-yellow-500 text-white text-sm font-medium">
-                  미
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="댓글 추가"
-                  className="min-h-16 resize-none border-gray-200 focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* 하단 */}
@@ -387,11 +479,13 @@ export default function TaskPanel({ isOpen, onClose, task }) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">작업 참여자</span>
-              <Avatar className="w-6 h-6">
-                <AvatarFallback className="bg-yellow-500 text-white text-xs font-medium">
-                  미
-                </AvatarFallback>
-              </Avatar>
+              {assigneeInfo && (
+                <Avatar className="w-6 h-6">
+                  <AvatarFallback className="bg-blue-500 text-white text-xs font-medium">
+                    {assigneeInfo.userName?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -412,14 +506,14 @@ export default function TaskPanel({ isOpen, onClose, task }) {
           <div className="flex space-x-2">
             <Button
               variant="outline"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 bg-transparent"
             >
               취소
             </Button>
             <Button
               onClick={handleSave}
-              disabled={loading}
+              disabled={loading || !taskName.trim()}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
             >
               {loading

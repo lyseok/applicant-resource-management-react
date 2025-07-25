@@ -1,12 +1,17 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { taskAPI } from '../api/taskAPI';
+import { taskAPI, workHistoryAPI } from '@/services/api';
+import { createWorkHistory } from './workHistorySlice';
+import {
+  generateWorkContent,
+  WORK_TYPES,
+  WORK_TABLES,
+} from '../../utils/workHistoryUtils';
 
-// 비동기 액션들
-export const fetchTasks = createAsyncThunk(
-  'tasks/fetchTasks',
+export const fetchProjectTasks = createAsyncThunk(
+  'tasks/fetchProjectTasks',
   async (projectId, { rejectWithValue }) => {
     try {
-      const response = await taskAPI.getTasks(projectId);
+      const response = await taskAPI.getProjectTasks(projectId);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -14,23 +19,222 @@ export const fetchTasks = createAsyncThunk(
   }
 );
 
-export const createTask = createAsyncThunk(
+export const createTaskAsync = createAsyncThunk(
   'tasks/createTask',
-  async (taskData, { rejectWithValue }) => {
+  async (taskData, { dispatch, getState, rejectWithValue }) => {
     try {
       const response = await taskAPI.createTask(taskData);
-      return response.data;
+      const newTask = response.data;
+
+      // 작업 내역 기록
+      const { auth, project } = getState();
+      const workHistoryData = {
+        prjNo: project.currentProject?.prjNo,
+        userId: auth.user?.userId,
+        workDate: new Date().toISOString(),
+        workTable: WORK_TABLES.TASK,
+        workType: WORK_TYPES.CREATE,
+        workTarget: newTask.taskNo,
+        workContent: generateWorkContent(
+          WORK_TYPES.CREATE,
+          WORK_TABLES.TASK,
+          newTask.taskName
+        ),
+      };
+
+      dispatch(createWorkHistory(workHistoryData));
+
+      return newTask;
     } catch (error) {
-      return rejectWithValue(error.response?.data || error.message);
+      return rejectWithValue(
+        error.response?.data?.message || '작업 생성에 실패했습니다.'
+      );
     }
   }
 );
 
-export const updateTask = createAsyncThunk(
+export const updateTaskAsync = createAsyncThunk(
   'tasks/updateTask',
-  async ({ id, taskData }, { rejectWithValue }) => {
+  async ({ taskId, taskData }, { dispatch, getState, rejectWithValue }) => {
     try {
-      const response = await taskAPI.updateTask(id, taskData);
+      // taskId와 taskData 유효성 검사
+      console.log('updateTaskAsync called with:', { taskId, taskData });
+
+      if (!taskId || taskId === 'undefined' || taskId === 'null') {
+        console.error('Invalid taskId:', taskId);
+        throw new Error('작업 ID가 유효하지 않습니다.');
+      }
+
+      if (!taskData) {
+        console.error('Invalid taskData:', taskData);
+        throw new Error('작업 데이터가 유효하지 않습니다.');
+      }
+
+      const response = await taskAPI.updateTask(taskId, taskData);
+      const updatedTask = response.data;
+
+      // 기존 작업 정보 가져오기
+      const { tasks, auth, project } = getState();
+      const oldTask = tasks.tasks.find((task) => task.taskNo === taskId);
+
+      // 작업 내역 기록
+      const workHistoryData = {
+        prjNo: project.currentProject?.prjNo,
+        userId: auth.user?.userId,
+        workDate: new Date().toISOString(),
+        workTable: WORK_TABLES.TASK,
+        workTarget: taskId,
+      };
+
+      // 상태 변경 확인
+      if (oldTask && oldTask.taskStatus !== updatedTask.taskStatus) {
+        dispatch(
+          createWorkHistory({
+            ...workHistoryData,
+            workType: WORK_TYPES.STATUS_CHANGE,
+            workContent: generateWorkContent(
+              WORK_TYPES.STATUS_CHANGE,
+              WORK_TABLES.TASK,
+              updatedTask.taskName,
+              {
+                oldValue: oldTask.taskStatus,
+                newValue: updatedTask.taskStatus,
+              }
+            ),
+          })
+        );
+      }
+
+      // 진척도 변경 확인
+      if (oldTask && oldTask.progressRate !== updatedTask.progressRate) {
+        dispatch(
+          createWorkHistory({
+            ...workHistoryData,
+            workType: WORK_TYPES.PROGRESS_UPDATE,
+            workContent: generateWorkContent(
+              WORK_TYPES.PROGRESS_UPDATE,
+              WORK_TABLES.TASK,
+              updatedTask.taskName,
+              {
+                oldValue: oldTask.progressRate,
+                newValue: updatedTask.progressRate,
+              }
+            ),
+          })
+        );
+      }
+
+      // 담당자 변경 확인
+      if (oldTask && oldTask.userId !== updatedTask.userId) {
+        const assigneeName = updatedTask.prjMem?.userName || '미지정';
+        dispatch(
+          createWorkHistory({
+            ...workHistoryData,
+            workType: WORK_TYPES.ASSIGN,
+            workContent: generateWorkContent(
+              WORK_TYPES.ASSIGN,
+              WORK_TABLES.TASK,
+              updatedTask.taskName,
+              {
+                assigneeName: updatedTask.userId ? assigneeName : null,
+              }
+            ),
+          })
+        );
+      }
+
+      // 일반 수정 기록 (상태, 진척도, 담당자 변경이 아닌 경우)
+      if (
+        !oldTask ||
+        (oldTask.taskStatus === updatedTask.taskStatus &&
+          oldTask.progressRate === updatedTask.progressRate &&
+          oldTask.userId === updatedTask.userId)
+      ) {
+        dispatch(
+          createWorkHistory({
+            ...workHistoryData,
+            workType: WORK_TYPES.UPDATE,
+            workContent: generateWorkContent(
+              WORK_TYPES.UPDATE,
+              WORK_TABLES.TASK,
+              updatedTask.taskName
+            ),
+          })
+        );
+      }
+
+      return updatedTask;
+    } catch (error) {
+      console.error('Task update error:', error);
+      console.error('TaskId:', taskId);
+      console.error('TaskData:', taskData);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const deleteTaskAsync = createAsyncThunk(
+  'tasks/deleteTask',
+  async (taskId, { dispatch, getState, rejectWithValue }) => {
+    try {
+      // taskId가 undefined인지 확인
+      if (!taskId || taskId === 'undefined') {
+        throw new Error('작업 ID가 유효하지 않습니다.');
+      }
+
+      const { tasks, auth, project } = getState();
+      const taskToDelete = tasks.tasks.find((task) => task.taskNo === taskId);
+
+      await taskAPI.deleteTask(taskId);
+
+      // 작업 내역 기록
+      if (taskToDelete) {
+        const workHistoryData = {
+          prjNo: project.currentProject?.prjNo,
+          userId: auth.user?.userId,
+          workDate: new Date().toISOString(),
+          workTable: WORK_TABLES.TASK,
+          workType: WORK_TYPES.DELETE,
+          workTarget: taskId,
+          workContent: generateWorkContent(
+            WORK_TYPES.DELETE,
+            WORK_TABLES.TASK,
+            taskToDelete.taskName
+          ),
+        };
+
+        dispatch(createWorkHistory(workHistoryData));
+      }
+
+      return taskId; // 삭제된 작업의 ID 반환
+    } catch (error) {
+      console.error('Task delete error:', error);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const updateTaskStatusAsync = createAsyncThunk(
+  'tasks/updateTaskStatus',
+  async ({ taskId, status }, { rejectWithValue }) => {
+    try {
+      if (!taskId || taskId === 'undefined') {
+        throw new Error('작업 ID가 유효하지 않습니다.');
+      }
+
+      const response = await taskAPI.updateTaskStatus(taskId, status);
+      return { taskId, status, data: response.data };
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const fetchWorkHistoryAsync = createAsyncThunk(
+  'tasks/fetchWorkHistory',
+  async (projectId, { rejectWithValue }) => {
+    try {
+      const response = await workHistoryAPI.getWorkHistory(projectId);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -38,169 +242,129 @@ export const updateTask = createAsyncThunk(
   }
 );
 
-export const deleteTask = createAsyncThunk(
-  'tasks/deleteTask',
-  async (taskId, { rejectWithValue }) => {
-    try {
-      await taskAPI.deleteTask(taskId);
-      return taskId;
-    } catch (error) {
-      return rejectWithValue(error.response?.data || error.message);
-    }
-  }
-);
+const calculateStatistics = (tasks) => {
+  const total = tasks.length;
+  const completed = tasks.filter(
+    (task) => task.taskStatus === 'PEND-003'
+  ).length;
+  const incomplete = tasks.filter(
+    (task) => task.taskStatus !== 'PEND-003'
+  ).length;
+  const overdue = tasks.filter((task) => {
+    if (!task.dueDate || task.taskStatus === 'PEND-003') return false;
+    const dueDate = new Date(
+      task.dueDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
+    );
+    const today = new Date();
+    return dueDate < today;
+  }).length;
+
+  return { total, completed, incomplete, overdue };
+};
 
 const initialState = {
-  tasks: [
-    {
-      taskNo: 'TASK001',
-      prjNo: 'PRJ001',
-      userId: 'USER001',
-      sectNo: 'SECT001',
-      creatorId: 'USER001',
-      taskName: '프로젝트 요구사항 정의서 작성',
-      taskStatus: 'TODO',
-      detailContent: '프로젝트의 전체적인 요구사항 파악및 이걸 왜하지?.',
-      startDate: '20240715',
-      dueDate: '20240718',
-      priorityCode: 'LOW',
-      upperTaskNo: null,
-      progressRate: '0',
-      deleteDate: null,
-      deleteUserId: null,
-    },
-    {
-      taskNo: 'TASK002',
-      prjNo: 'PRJ001',
-      userId: 'USER001',
-      sectNo: 'SECT001',
-      creatorId: 'USER001',
-      taskName: 'ERD 설계 및 테이블 구조 정의',
-      taskStatus: 'TODO',
-      detailContent:
-        '프로젝트의 데이터베이스 구조를 설계하고 ERD를 작성하는 작업입니다.',
-      startDate: '20240717',
-      dueDate: '20240721',
-      priorityCode: 'MEDIUM',
-      upperTaskNo: 'TASK001',
-      progressRate: '0',
-      deleteDate: null,
-      deleteUserId: null,
-    },
-    {
-      taskNo: 'TASK003',
-      prjNo: 'PRJ001',
-      userId: 'USER001',
-      sectNo: 'SECT001',
-      creatorId: 'USER001',
-      taskName: '팀원과 타임라인 공유하기',
-      taskStatus: 'TODO',
-      detailContent: '프로젝트 타임라인을 팀원들과 공유하는 작업입니다.',
-      startDate: '20240719',
-      dueDate: '20240722',
-      priorityCode: 'MEDIUM',
-      upperTaskNo: 'TASK002',
-      progressRate: '0',
-      deleteDate: null,
-      deleteUserId: null,
-    },
-  ],
+  tasks: [],
+  workHistory: [],
   loading: false,
   error: null,
-  statistics: {
-    total: 3,
-    completed: 0,
-    incomplete: 3,
-    overdue: 0,
-  },
+  statistics: { total: 0, completed: 0, incomplete: 0, overdue: 0 },
+  isTaskPanelOpen: false,
+  selectedTask: null,
 };
 
 const taskSlice = createSlice({
   name: 'tasks',
   initialState,
   reducers: {
+    openTaskPanel: (state, action) => {
+      state.selectedTask = action.payload;
+      state.isTaskPanelOpen = true;
+    },
+    closeTaskPanel: (state) => {
+      state.isTaskPanelOpen = false;
+      state.selectedTask = null;
+    },
     clearError: (state) => {
       state.error = null;
-    },
-    updateTaskStatus: (state, action) => {
-      const { taskNo, status } = action.payload;
-      const task = state.tasks.find((task) => task.taskNo === taskNo);
-      if (task) {
-        task.taskStatus = status;
-        task.progressRate = status === 'COMPLETED' ? '100' : task.progressRate;
-      }
-      // 통계 업데이트
-      state.statistics = calculateStatistics(state.tasks);
     },
   },
   extraReducers: (builder) => {
     builder
-      // fetchTasks
-      .addCase(fetchTasks.pending, (state) => {
+      // 프로젝트 작업 목록 조회
+      .addCase(fetchProjectTasks.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchTasks.fulfilled, (state, action) => {
+      .addCase(fetchProjectTasks.fulfilled, (state, action) => {
         state.loading = false;
         state.tasks = action.payload;
         state.statistics = calculateStatistics(action.payload);
       })
-      .addCase(fetchTasks.rejected, (state, action) => {
+      .addCase(fetchProjectTasks.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
-      // createTask
-      .addCase(createTask.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(createTask.fulfilled, (state, action) => {
-        state.loading = false;
+
+      // 작업 생성
+      .addCase(createTaskAsync.fulfilled, (state, action) => {
         state.tasks.push(action.payload);
         state.statistics = calculateStatistics(state.tasks);
+        state.isTaskPanelOpen = false;
+        state.selectedTask = null;
       })
-      .addCase(createTask.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // updateTask
-      .addCase(updateTask.fulfilled, (state, action) => {
+
+      // 작업 수정
+      .addCase(updateTaskAsync.fulfilled, (state, action) => {
         const index = state.tasks.findIndex(
           (task) => task.taskNo === action.payload.taskNo
         );
         if (index !== -1) {
           state.tasks[index] = action.payload;
+          state.statistics = calculateStatistics(state.tasks);
         }
-        state.statistics = calculateStatistics(state.tasks);
+        if (state.selectedTask?.taskNo === action.payload.taskNo) {
+          state.selectedTask = action.payload;
+        }
       })
-      // deleteTask
-      .addCase(deleteTask.fulfilled, (state, action) => {
+
+      // 작업 삭제
+      .addCase(deleteTaskAsync.fulfilled, (state, action) => {
         state.tasks = state.tasks.filter(
           (task) => task.taskNo !== action.payload
         );
         state.statistics = calculateStatistics(state.tasks);
+        if (state.selectedTask?.taskNo === action.payload) {
+          state.isTaskPanelOpen = false;
+          state.selectedTask = null;
+        }
+      })
+
+      // 작업 상태 변경
+      .addCase(updateTaskStatusAsync.fulfilled, (state, action) => {
+        const index = state.tasks.findIndex(
+          (task) => task.taskNo === action.payload.taskId
+        );
+        if (index !== -1) {
+          state.tasks[index].taskStatus = action.payload.status;
+          state.statistics = calculateStatistics(state.tasks);
+        }
+      })
+
+      // 작업 내역 조회
+      .addCase(fetchWorkHistoryAsync.fulfilled, (state, action) => {
+        state.workHistory = action.payload;
       });
   },
 });
 
-// 통계 계산 함수
-const calculateStatistics = (tasks) => {
-  const total = tasks.length;
-  const completed = tasks.filter(
-    (task) => task.taskStatus === 'COMPLETED'
-  ).length;
-  const incomplete = tasks.filter(
-    (task) => task.taskStatus !== 'COMPLETED'
-  ).length;
-  const overdue = tasks.filter((task) => {
-    const dueDate = new Date(
-      task.dueDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
-    );
-    const today = new Date();
-    return dueDate < today && task.taskStatus !== 'COMPLETED';
-  }).length;
+export const { openTaskPanel, closeTaskPanel, clearError } = taskSlice.actions;
 
-  return { total, completed, incomplete, overdue };
-};
+// 별칭 exports 추가
+export const fetchTasks = fetchProjectTasks;
+export const createTask = createTaskAsync;
+export const updateTask = updateTaskAsync;
+export const deleteTask = deleteTaskAsync;
+export const updateTaskStatus = updateTaskStatusAsync;
+export const fetchWorkHistory = fetchWorkHistoryAsync;
 
-export const { clearError, updateTaskStatus } = taskSlice.actions;
 export default taskSlice.reducer;
