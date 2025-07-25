@@ -119,15 +119,7 @@ export default function ProjectHeader() {
             <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 px-3 py-1">
               {getProjectStatusLabel(currentProject.projectStatus)}
             </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsMemberModalOpen(true)}
-              className="border-gray-300 hover:bg-gray-50 bg-transparent"
-            >
-              <Users className="w-4 h-4 mr-2" />
-              멤버 ({currentProject.prjMemList?.length || 0})
-            </Button>
+
             {isAdmin && (
               <Button
                 variant="outline"

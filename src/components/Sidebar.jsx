@@ -33,7 +33,7 @@ export default function Sidebar() {
 
   const menuItems = [
     { id: '/', label: '홈', icon: Home },
-    { id: '/inbox', label: '수신함', icon: Inbox, badge: 1 },
+    // { id: '/inbox', label: '수신함', icon: Inbox, badge: 1 },
   ];
 
   const getProjectColor = (project) => {
