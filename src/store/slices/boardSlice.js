@@ -1,8 +1,80 @@
-import { createSlice } from '@reduxjs/toolkit';
-import { dummyBoardPosts } from '@/data/dummyData';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { boardAPI } from '@/services/api';
+
+export const fetchProjectPosts = createAsyncThunk(
+  'board/fetchProjectPosts',
+  async (projectId, { rejectWithValue }) => {
+    try {
+      const response = await boardAPI.getProjectPosts(projectId);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const createPostAsync = createAsyncThunk(
+  'board/createPost',
+  async (postData, { rejectWithValue }) => {
+    try {
+      const response = await boardAPI.createPost(postData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const updatePostAsync = createAsyncThunk(
+  'board/updatePost',
+  async ({ postId, postData }, { rejectWithValue }) => {
+    try {
+      const response = await boardAPI.updatePost(postId, postData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const deletePostAsync = createAsyncThunk(
+  'board/deletePost',
+  async (postId, { rejectWithValue }) => {
+    try {
+      await boardAPI.deletePost(postId);
+      return postId;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const createCommentAsync = createAsyncThunk(
+  'board/createComment',
+  async ({ postId, comment }, { rejectWithValue }) => {
+    try {
+      const response = await boardAPI.createComment(comment);
+      return { postId, comment: response.data };
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const deleteCommentAsync = createAsyncThunk(
+  'board/deleteComment',
+  async ({ postId, commentId }, { rejectWithValue }) => {
+    try {
+      await boardAPI.deleteComment(commentId);
+      return { postId, commentId };
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
 
 const initialState = {
-  posts: [...dummyBoardPosts], // 배열 복사로 불변성 보장
+  posts: [],
   loading: false,
   error: null,
 };
@@ -11,156 +83,67 @@ const boardSlice = createSlice({
   name: 'board',
   initialState,
   reducers: {
-    // 게시글 목록 설정
-    setPosts: (state, action) => {
-      const projectId = action.payload;
-      state.posts = dummyBoardPosts.filter((post) => post.prjNo === projectId);
-      state.loading = false;
-    },
-
-    // 로딩 상태 설정
-    setLoading: (state, action) => {
-      state.loading = action.payload;
-    },
-
-    // 에러 클리어
     clearError: (state) => {
       state.error = null;
     },
-
-    // 새 게시글 생성
-    createPost: (state, action) => {
-      const newPost = {
-        ...action.payload,
-        createDate: new Date().toISOString(),
-      };
-
-      // 더미 데이터에도 추가
-      const updatedDummyPosts = [...dummyBoardPosts, newPost];
-      dummyBoardPosts.length = 0;
-      dummyBoardPosts.push(...updatedDummyPosts);
-
-      // 상태 업데이트
-      state.posts = [...state.posts, newPost];
-    },
-
-    // 게시글 업데이트
-    updatePost: (state, action) => {
-      const { id, postData } = action.payload;
-      const postIndex = state.posts.findIndex((post) => post.prjPostNo === id);
-      const dummyPostIndex = dummyBoardPosts.findIndex(
-        (post) => post.prjPostNo === id
-      );
-
-      if (postIndex !== -1) {
-        // 새 배열 생성하여 불변성 보장
-        const updatedPosts = [...state.posts];
-        updatedPosts[postIndex] = { ...postData };
-        state.posts = updatedPosts;
-
-        // 더미 데이터도 업데이트
-        if (dummyPostIndex !== -1) {
-          dummyBoardPosts[dummyPostIndex] = { ...postData };
-        }
-      }
-    },
-
-    // 게시글 삭제
-    deletePost: (state, action) => {
-      const postId = action.payload;
-
-      // 새 배열 생성하여 불변성 보장
-      state.posts = state.posts.filter((post) => post.prjPostNo !== postId);
-
-      // 더미 데이터에서도 제거
-      const dummyPostIndex = dummyBoardPosts.findIndex(
-        (post) => post.prjPostNo === postId
-      );
-      if (dummyPostIndex !== -1) {
-        dummyBoardPosts.splice(dummyPostIndex, 1);
-      }
-    },
-
-    // 댓글 생성
-    createComment: (state, action) => {
-      const { postId, comment } = action.payload;
-      const postIndex = state.posts.findIndex(
-        (post) => post.prjPostNo === postId
-      );
-      const dummyPostIndex = dummyBoardPosts.findIndex(
-        (post) => post.prjPostNo === postId
-      );
-
-      if (postIndex !== -1) {
-        const updatedPosts = [...state.posts];
-        const updatedPost = { ...updatedPosts[postIndex] };
-        updatedPost.comments = [...(updatedPost.comments || []), comment];
-        updatedPosts[postIndex] = updatedPost;
-        state.posts = updatedPosts;
-
-        // 더미 데이터도 업데이트 (불변성 유지)
-        if (dummyPostIndex !== -1) {
-          dummyBoardPosts[dummyPostIndex] = {
-            ...dummyBoardPosts[dummyPostIndex],
-            comments: [
-              ...(dummyBoardPosts[dummyPostIndex].comments || []),
-              comment,
-            ],
-          };
-        }
-      }
-    },
-
-    // 댓글 삭제
-    deleteComment: (state, action) => {
-      const { postId, commentId } = action.payload;
-      const postIndex = state.posts.findIndex(
-        (post) => post.prjPostNo === postId
-      );
-      const dummyPostIndex = dummyBoardPosts.findIndex(
-        (post) => post.prjPostNo === postId
-      );
-
-      if (postIndex !== -1) {
-        const updatedPosts = [...state.posts];
-        const updatedPost = { ...updatedPosts[postIndex] };
-        updatedPost.comments = (updatedPost.comments || []).filter(
-          (comment) => comment.commentNo !== commentId
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchProjectPosts.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchProjectPosts.fulfilled, (state, action) => {
+        state.loading = false;
+        state.posts = action.payload;
+      })
+      .addCase(fetchProjectPosts.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(createPostAsync.fulfilled, (state, action) => {
+        state.posts.unshift(action.payload);
+      })
+      .addCase(updatePostAsync.fulfilled, (state, action) => {
+        const index = state.posts.findIndex(
+          (post) => post.prjPostNo === action.payload.prjPostNo
         );
-        updatedPosts[postIndex] = updatedPost;
-        state.posts = updatedPosts;
-
-        // 더미 데이터도 업데이트 (불변성 유지)
-        if (dummyPostIndex !== -1 && dummyBoardPosts[dummyPostIndex].comments) {
-          dummyBoardPosts[dummyPostIndex] = {
-            ...dummyBoardPosts[dummyPostIndex],
-            comments: dummyBoardPosts[dummyPostIndex].comments.filter(
-              (comment) => comment.commentNo !== commentId
-            ),
-          };
+        if (index !== -1) {
+          state.posts[index] = action.payload;
         }
-      }
-    },
+      })
+      .addCase(deletePostAsync.fulfilled, (state, action) => {
+        state.posts = state.posts.filter(
+          (post) => post.prjPostNo !== action.payload
+        );
+      })
+      .addCase(createCommentAsync.fulfilled, (state, action) => {
+        const { postId, comment } = action.payload;
+        const post = state.posts.find((p) => p.prjPostNo === postId);
+        if (post) {
+          post.comments = post.comments || [];
+          post.comments.push(comment);
+        }
+      })
+      .addCase(deleteCommentAsync.fulfilled, (state, action) => {
+        const { postId, commentId } = action.payload;
+        const post = state.posts.find((p) => p.prjPostNo === postId);
+        if (post && post.bbsCommentList) {
+          post.bbsCommentList = post.bbsCommentList.filter(
+            (c) => c.commentNo !== commentId
+          );
+        }
+      });
   },
 });
 
-// 비동기 액션 시뮬레이션
-export const fetchPosts = (projectId) => (dispatch) => {
-  dispatch(setLoading(true));
-  setTimeout(() => {
-    dispatch(setPosts(projectId));
-  }, 300);
-};
+export const { clearError } = boardSlice.actions;
 
-export const {
-  setPosts,
-  setLoading,
-  clearError,
-  createPost,
-  updatePost,
-  deletePost,
-  createComment,
-  deleteComment,
-} = boardSlice.actions;
+// 별칭 exports 추가
+export const createPost = createPostAsync;
+export const updatePost = updatePostAsync;
+export const deletePost = deletePostAsync;
+export const createComment = createCommentAsync;
+export const deleteComment = deleteCommentAsync;
 
 export default boardSlice.reducer;

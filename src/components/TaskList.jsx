@@ -79,18 +79,6 @@ export default function TaskList() {
             onStatusChange={handleTaskStatusChange}
           />
         ))}
-
-        {/* 섹션 추가 버튼 */}
-        <div className="mt-8 pt-4 border-t border-gray-200">
-          <Button
-            variant="ghost"
-            className="text-sm text-gray-500 hover:bg-gray-50 rounded-lg"
-            onClick={() => handleAddTask('TODO')}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            섹션 추가
-          </Button>
-        </div>
       </div>
     </div>
   );

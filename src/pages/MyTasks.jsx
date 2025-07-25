@@ -27,7 +27,7 @@ const tabs = [
   '파일',
 ];
 
-// 섹션 정의 (할 일, 진행 중, 완료)
+// 섹션 정의 (할 ��, 진행 중, 완료)
 const sections = [
   { title: '할 일', status: 'TODO' },
   { title: '수행 중', status: 'IN_PROGRESS' },

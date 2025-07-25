@@ -21,20 +21,20 @@ import {
   deleteComment,
   updatePost,
 } from '@/store/slices/boardSlice';
-import { currentUser } from '@/data/dummyData'; // Assuming currentUser is available
 
 export default function ProjectBoard() {
   const dispatch = useDispatch();
   const { posts, loading } = useSelector((state) => state.board);
   const { currentProject } = useSelector((state) => state.project);
+  const { currentUser } = useSelector((state) => state.auth);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isEditingPost, setIsEditingPost] = useState(false); // New state for editing
+  const [isEditingPost, setIsEditingPost] = useState(false);
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostContent, setNewPostContent] = useState('');
-  const [editedPostTitle, setEditedPostTitle] = useState(''); // New state for edited title
-  const [editedPostContent, setEditedPostContent] = useState(''); // New state for edited content
+  const [editedPostTitle, setEditedPostTitle] = useState('');
+  const [editedPostContent, setEditedPostContent] = useState('');
   const [commentInputs, setCommentInputs] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -45,16 +45,36 @@ export default function ProjectBoard() {
         post.content.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // 줄바꿈 처리 함수
+  const formatTextWithLineBreaks = (text) => {
+    if (!text) return '';
+    return text.split('\\n').map((line, index) => (
+      <span key={index}>
+        {line}
+        {index < text.split('\\n').length - 1 && <br />}
+      </span>
+    ));
+  };
+
+  // 요약용 텍스트 처리 (줄바꿈 포함, 길이 제한)
+  const formatSummaryText = (text, maxLength = 150) => {
+    if (!text) return '';
+    const plainText = text.replace(/\\n/g, ' ').trim();
+    return plainText.length > maxLength
+      ? plainText.substring(0, maxLength) + '...'
+      : plainText;
+  };
+
   const handleCreatePost = () => {
     if (!newPostTitle.trim() || !newPostContent.trim()) return;
 
     const newPost = {
-      prjPostNo: `POST${String(Date.now()).slice(-6)}`, // More unique ID
-      prjNo: currentProject?.prjNo || 'PRJ001',
+      prjPostNo: `POST${String(Date.now()).slice(-6)}`,
+      prjNo: currentProject?.prjNo,
       userId: currentUser.userId,
       userName: currentUser.userName,
       title: newPostTitle,
-      content: newPostContent,
+      content: newPostContent.replace(/\n/g, '\\n'), // 줄바꿈을 \n으로 변환하여 저장
       createDate: new Date().toISOString(),
       deleteDate: null,
       comments: [],
@@ -69,13 +89,14 @@ export default function ProjectBoard() {
   const handlePostClick = (post) => {
     setSelectedPost(post);
     setIsDetailModalOpen(true);
-    setIsEditingPost(false); // Reset editing state when opening detail
+    setIsEditingPost(false);
   };
 
   const handleEditPost = () => {
     if (selectedPost) {
       setEditedPostTitle(selectedPost.title);
-      setEditedPostContent(selectedPost.content);
+      // 편집 시 \n을 실제 줄바꿈으로 변환
+      setEditedPostContent(selectedPost.content.replace(/\\n/g, '\n'));
       setIsEditingPost(true);
     }
   };
@@ -86,19 +107,23 @@ export default function ProjectBoard() {
     const updatedPostData = {
       ...selectedPost,
       title: editedPostTitle,
-      content: editedPostContent,
+      content: editedPostContent.replace(/\n/g, '\\n'), // 저장 시 줄바꿈을 \n으로 변환
     };
+
     dispatch(
-      updatePost({ id: selectedPost.prjPostNo, postData: updatedPostData })
+      updatePost({
+        postId: selectedPost.prjPostNo,
+        postData: updatedPostData,
+      })
     );
-    setSelectedPost(updatedPostData); // Update selectedPost to reflect changes
+    setSelectedPost(updatedPostData);
     setIsEditingPost(false);
   };
 
   const handleCancelEdit = () => {
     setIsEditingPost(false);
     setEditedPostTitle(selectedPost.title);
-    setEditedPostContent(selectedPost.content);
+    setEditedPostContent(selectedPost.content.replace(/\\n/g, '\n'));
   };
 
   const handleAddComment = (postId) => {
@@ -111,13 +136,23 @@ export default function ProjectBoard() {
       prjNo: currentProject?.prjNo || 'PRJ001',
       userId: currentUser.userId,
       userName: currentUser.userName,
-      commentContent: commentText,
+      commentContent: commentText.replace(/\n/g, '\\n'), // 댓글도 줄바꿈 처리
       createDate: new Date().toISOString(),
       deleteDate: null,
     };
 
     dispatch(createComment({ postId, comment: newComment }));
     setCommentInputs({ ...commentInputs, [postId]: '' });
+
+    setSelectedPost((prevPost) => {
+      if (prevPost && prevPost.prjPostNo === postId) {
+        return {
+          ...prevPost,
+          bbsCommentList: [...(prevPost.bbsCommentList || []), newComment],
+        };
+      }
+      return prevPost;
+    });
   };
 
   const handleDeletePost = (postId) => {
@@ -128,9 +163,26 @@ export default function ProjectBoard() {
     }
   };
 
-  const handleDeleteComment = (postId, commentId) => {
+  const handleDeleteComment = async (postId, commentId) => {
     if (window.confirm('정말로 이 댓글을 삭제하시겠습니까?')) {
-      dispatch(deleteComment({ postId, commentId }));
+      try {
+        await dispatch(deleteComment({ postId, commentId })).unwrap();
+
+        setSelectedPost((prevPost) => {
+          if (prevPost && prevPost.prjPostNo === postId) {
+            return {
+              ...prevPost,
+              bbsCommentList: prevPost.bbsCommentList.filter(
+                (c) => c.commentNo !== commentId
+              ),
+            };
+          }
+          return prevPost;
+        });
+      } catch (error) {
+        console.error('댓글 삭제 실패:', error);
+        alert('댓글 삭제에 실패했습니다.');
+      }
     }
   };
 
@@ -145,9 +197,60 @@ export default function ProjectBoard() {
     });
   };
 
-  const getUserInfo = (userId) => {
-    const member = currentProject?.members?.find((m) => m.userId === userId);
-    return member || { userName: '알 수 없음', userEmail: '' };
+  const getUserInfo = (post) => {
+    if (post.prjMem && post.prjMem.userName) {
+      return {
+        userName: post.prjMem.userName,
+        userEmail: post.prjMem.userEmail || '',
+        userPosition: post.prjMem.userPosition || '',
+      };
+    }
+
+    const member = currentProject?.prjMemList?.find(
+      (m) => m.userId === post.userId && !m.deleteDate
+    );
+    if (member) {
+      return {
+        userName: member.userName,
+        userEmail: member.userEmail || '',
+        userPosition: member.userPosition || '',
+      };
+    }
+
+    return { userName: '알 수 없음', userEmail: '', userPosition: '' };
+  };
+
+  const getCommentUserInfo = (comment) => {
+    if (comment.prjMem && comment.prjMem.userName) {
+      return {
+        userName: comment.prjMem.userName,
+        userEmail: comment.prjMem.userEmail || '',
+      };
+    }
+
+    const member = currentProject?.prjMemList?.find(
+      (m) => m.userId === comment.userId && !m.deleteDate
+    );
+    if (member) {
+      return {
+        userName: member.userName,
+        userEmail: member.userEmail || '',
+      };
+    }
+
+    return { userName: '알 수 없음', userEmail: '' };
+  };
+
+  const getValidComments = (post) => {
+    if (!post.bbsCommentList) return [];
+
+    return post.bbsCommentList.filter(
+      (comment) =>
+        comment.commentNo &&
+        comment.userId &&
+        comment.commentContent &&
+        comment.commentContent.trim() !== ''
+    );
   };
 
   return (
@@ -196,7 +299,9 @@ export default function ProjectBoard() {
             </Card>
           ) : (
             filteredPosts.map((post) => {
-              const userInfo = getUserInfo(post.userId);
+              const userInfo = getUserInfo(post);
+              const validComments = getValidComments(post);
+
               return (
                 <Card
                   key={post.prjPostNo}
@@ -220,22 +325,19 @@ export default function ProjectBoard() {
                           </div>
                         </div>
                       </div>
-                      {/* <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button> */}
                     </div>
 
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
                       {post.title}
                     </h3>
                     <p className="text-gray-600 text-sm line-clamp-3 mb-4">
-                      {post.content}
+                      {formatSummaryText(post.content)}
                     </p>
 
                     <div className="flex items-center space-x-4 text-sm text-gray-500">
                       <div className="flex items-center space-x-1">
                         <MessageCircle className="w-4 h-4" />
-                        <span>{post.comments?.length || 0}</span>
+                        <span>{validComments.length}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <ThumbsUp className="w-4 h-4" />
@@ -370,13 +472,12 @@ export default function ProjectBoard() {
                   <div className="flex items-center space-x-3 mb-4">
                     <Avatar className="w-12 h-12">
                       <AvatarFallback className="bg-blue-500 text-white font-medium">
-                        {getUserInfo(selectedPost.userId).userName?.charAt(0) ||
-                          'U'}
+                        {getUserInfo(selectedPost).userName?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <div className="font-medium text-gray-900">
-                        {getUserInfo(selectedPost.userId).userName}
+                        {getUserInfo(selectedPost).userName}
                       </div>
                       <div className="text-sm text-gray-500">
                         {formatDate(selectedPost.createDate)}
@@ -424,8 +525,8 @@ export default function ProjectBoard() {
                       <h1 className="text-2xl font-bold text-gray-900 mb-4">
                         {selectedPost.title}
                       </h1>
-                      <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {selectedPost.content}
+                      <div className="text-gray-700 leading-relaxed">
+                        {formatTextWithLineBreaks(selectedPost.content)}
                       </div>
                     </>
                   )}
@@ -435,7 +536,7 @@ export default function ProjectBoard() {
                 {!isEditingPost && (
                   <div className="p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      댓글 ({selectedPost.comments?.length || 0})
+                      댓글 ({getValidComments(selectedPost).length})
                     </h3>
 
                     {/* 댓글 입력 */}
@@ -446,7 +547,7 @@ export default function ProjectBoard() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 flex space-x-2">
-                        <Input
+                        <Textarea
                           placeholder="댓글을 입력하세요..."
                           value={commentInputs[selectedPost.prjPostNo] || ''}
                           onChange={(e) =>
@@ -455,11 +556,8 @@ export default function ProjectBoard() {
                               [selectedPost.prjPostNo]: e.target.value,
                             })
                           }
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              handleAddComment(selectedPost.prjPostNo);
-                            }
-                          }}
+                          rows={2}
+                          className="resize-none"
                         />
                         <Button
                           size="sm"
@@ -469,7 +567,7 @@ export default function ProjectBoard() {
                           disabled={
                             !commentInputs[selectedPost.prjPostNo]?.trim()
                           }
-                          className="bg-blue-600 hover:bg-blue-700"
+                          className="bg-blue-600 hover:bg-blue-700 self-end"
                         >
                           <Send className="w-4 h-4" />
                         </Button>
@@ -478,8 +576,8 @@ export default function ProjectBoard() {
 
                     {/* 댓글 목록 */}
                     <div className="space-y-4">
-                      {selectedPost.comments?.map((comment) => {
-                        const commentUserInfo = getUserInfo(comment.userId);
+                      {getValidComments(selectedPost).map((comment) => {
+                        const commentUserInfo = getCommentUserInfo(comment);
                         return (
                           <div
                             key={comment.commentNo}
@@ -517,17 +615,18 @@ export default function ProjectBoard() {
                                     )}
                                   </div>
                                 </div>
-                                <p className="text-sm text-gray-700">
-                                  {comment.commentContent}
-                                </p>
+                                <div className="text-sm text-gray-700">
+                                  {formatTextWithLineBreaks(
+                                    comment.commentContent
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
                         );
                       })}
 
-                      {(!selectedPost.comments ||
-                        selectedPost.comments.length === 0) && (
+                      {getValidComments(selectedPost).length === 0 && (
                         <div className="text-center py-8 text-gray-500">
                           <MessageCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                           <p className="text-sm">아직 댓글이 없습니다.</p>

@@ -14,8 +14,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
 } from 'recharts';
 import {
   TrendingUp,
@@ -24,7 +22,6 @@ import {
   AlertCircle,
   Target,
   Users,
-  Calendar,
   Activity,
 } from 'lucide-react';
 import WorkHistoryPanel from './WorkHistoryPanel';
@@ -39,17 +36,17 @@ export default function Dashboard() {
   const statusData = [
     {
       name: '할 일',
-      value: tasks.filter((t) => t.taskStatus === 'TODO').length,
+      value: tasks.filter((t) => t.taskStatus === 'PEND-001').length,
       color: '#3B82F6',
     },
     {
       name: '진행 중',
-      value: tasks.filter((t) => t.taskStatus === 'IN_PROGRESS').length,
+      value: tasks.filter((t) => t.taskStatus === 'PEND-002').length,
       color: '#F59E0B',
     },
     {
       name: '완료',
-      value: tasks.filter((t) => t.taskStatus === 'COMPLETED').length,
+      value: tasks.filter((t) => t.taskStatus === 'PEND-003').length,
       color: '#10B981',
     },
   ];
@@ -57,15 +54,15 @@ export default function Dashboard() {
   const priorityData = [
     {
       name: '높음',
-      value: tasks.filter((t) => t.priorityCode === 'HIGH').length,
+      value: tasks.filter((t) => t.priorityCode === 'PCOD001').length,
     },
     {
       name: '중간',
-      value: tasks.filter((t) => t.priorityCode === 'MEDIUM').length,
+      value: tasks.filter((t) => t.priorityCode === 'PCOD002').length,
     },
     {
       name: '낮음',
-      value: tasks.filter((t) => t.priorityCode === 'LOW').length,
+      value: tasks.filter((t) => t.priorityCode === 'PCOD003').length,
     },
   ];
 
@@ -259,45 +256,6 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* 주간 진행률 */}
-        <Card className="bg-white shadow-sm border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
-              <Calendar className="w-5 h-5 mr-2 text-purple-600" />
-              주간 진행률
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weeklyProgress}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    stroke="#10B981"
-                    strokeWidth={3}
-                    dot={{ fill: '#10B981', strokeWidth: 2, r: 6 }}
-                    name="완료된 작업"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#6B7280"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={{ fill: '#6B7280', strokeWidth: 2, r: 4 }}
-                    name="전체 작업"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* 팀 성과 및 작업 내역 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 팀 성과 */}
@@ -349,58 +307,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* 작업 내역 추적 */}
-          <WorkHistoryPanel />
+          {/* 작업 내역 추적 - projectId 전달 */}
+          <WorkHistoryPanel projectId={currentProject?.prjNo || 'PRJT000008'} />
         </div>
-
-        {/* 최근 활동 */}
-        <Card className="bg-white shadow-sm border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              최근 활동
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {tasks.slice(0, 4).map((task, index) => (
-                <div key={task.taskNo} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">
-                      <span className="font-medium">{task.taskName}</span>
-                      {task.taskStatus === 'COMPLETED'
-                        ? ' 작업이 완료되었습니다'
-                        : ' 작업이 생성되었습니다'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {task.dueDate
-                        ? `마감일: ${task.dueDate.slice(
-                            4,
-                            6
-                          )}월 ${task.dueDate.slice(6, 8)}일`
-                        : '방금 전'}
-                    </p>
-                  </div>
-                  <Badge
-                    className={`text-xs ${
-                      task.taskStatus === 'COMPLETED'
-                        ? 'bg-green-100 text-green-800 border-green-200'
-                        : task.taskStatus === 'IN_PROGRESS'
-                        ? 'bg-orange-100 text-orange-800 border-orange-200'
-                        : 'bg-blue-100 text-blue-800 border-blue-200'
-                    }`}
-                  >
-                    {task.taskStatus === 'COMPLETED'
-                      ? '완료'
-                      : task.taskStatus === 'IN_PROGRESS'
-                      ? '진행중'
-                      : '대기'}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
