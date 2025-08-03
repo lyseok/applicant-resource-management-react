@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
@@ -30,6 +32,34 @@ export default function FloatingChatWidget() {
   const [stompClient, setStompClient] = useState(null);
   const messagesEndRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+
+  // 시간 포맷팅 함수
+  const formatMessageTime = (dateString) => {
+    if (!dateString) return '';
+
+    try {
+      const date = new Date(dateString);
+      // 유효한 날짜인지 확인
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date:', dateString);
+        return new Date().toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+
+      return date.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return new Date().toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+  };
 
   // 메시지 스크롤 자동 이동
   const scrollToBottom = () => {
@@ -78,14 +108,38 @@ export default function FloatingChatWidget() {
         dispatch(setConnectionStatus(true));
 
         // 채팅방 구독
-        client.subscribe(
-          `/topic/chatroom/${chatroom.chatroomNo}`,
-          (message) => {
+        client.subscribe(`/sub/chat.room.${chatroom.chatroomNo}`, (message) => {
+          try {
             const receivedMessage = JSON.parse(message.body);
             console.log('메시지 수신:', receivedMessage);
+
+            // 메시지에 createDate가 없거나 유효하지 않으면 현재 시간으로 설정
+            if (
+              !receivedMessage.createDate ||
+              receivedMessage.createDate === null
+            ) {
+              receivedMessage.createDate = new Date().toISOString();
+              console.log(
+                'createDate가 없어서 현재 시간으로 설정:',
+                receivedMessage.createDate
+              );
+            }
+
+            // 시간 형식 검증 및 수정
+            const testDate = new Date(receivedMessage.createDate);
+            if (isNaN(testDate.getTime())) {
+              receivedMessage.createDate = new Date().toISOString();
+              console.log(
+                '유효하지 않은 createDate, 현재 시간으로 설정:',
+                receivedMessage.createDate
+              );
+            }
+
             dispatch(messageReceived(receivedMessage));
+          } catch (error) {
+            console.error('메시지 파싱 오류:', error);
           }
-        );
+        });
       };
 
       client.onDisconnect = () => {
@@ -95,12 +149,15 @@ export default function FloatingChatWidget() {
 
       client.onStompError = (frame) => {
         console.error('STOMP 에러:', frame.headers['message']);
+        console.error('STOMP 에러 상세:', frame);
         dispatch(setConnectionStatus(false));
+
         // 재연결 시도
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
         reconnectTimeoutRef.current = setTimeout(() => {
+          console.log('WebSocket 재연결 시도...');
           connectWebSocket();
         }, 5000);
       };
@@ -148,6 +205,7 @@ export default function FloatingChatWidget() {
       prjNo: currentProject?.prjNo || projectId,
       userId: currentUser.userId,
       message: message.trim(),
+      createDate: new Date().toISOString(), // 클라이언트에서 현재 시간 추가
     };
 
     console.log('전송할 메시지 데이터:', messageData);
@@ -156,10 +214,11 @@ export default function FloatingChatWidget() {
       // WebSocket으로 전송 시도
       if (stompClient && stompClient.connected) {
         stompClient.publish({
-          destination: '/app/chat.sendMessage',
+          destination: `/pub/chat.message.${chatroom.chatroomNo}`,
           body: JSON.stringify(messageData),
         });
         setMessage('');
+        console.log('WebSocket으로 메시지 전송 완료');
       } else {
         // WebSocket 연결이 없으면 HTTP API 사용
         console.log('WebSocket 연결 없음, HTTP API 사용');
@@ -170,10 +229,13 @@ export default function FloatingChatWidget() {
       console.error('메시지 전송 실패:', error);
       // WebSocket 실패 시 HTTP API로 재시도
       try {
+        console.log('WebSocket 실패, HTTP API로 재시도');
         await dispatch(sendMessage(messageData)).unwrap();
         setMessage('');
       } catch (httpError) {
         console.error('HTTP API 메시지 전송도 실패:', httpError);
+        // 사용자에게 오류 알림
+        alert('메시지 전송에 실패했습니다. 다시 시도해주세요.');
       }
     }
   };
@@ -182,6 +244,7 @@ export default function FloatingChatWidget() {
   useEffect(() => {
     return () => {
       if (stompClient) {
+        console.log('컴포넌트 언마운트, WebSocket 연결 해제');
         stompClient.deactivate();
       }
       if (reconnectTimeoutRef.current) {
@@ -194,6 +257,21 @@ export default function FloatingChatWidget() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 채팅방이 변경되면 기존 연결 해제하고 새로 연결
+  useEffect(() => {
+    if (chatroom?.chatroomNo && isOpen) {
+      if (stompClient) {
+        console.log('채팅방 변경, 기존 연결 해제');
+        stompClient.deactivate();
+        setStompClient(null);
+      }
+      // 잠시 후 새로운 연결 시도
+      setTimeout(() => {
+        connectWebSocket();
+      }, 1000);
+    }
+  }, [chatroom?.chatroomNo]);
 
   // 프로젝트 상세 페이지가 아니면 렌더링하지 않음
   if (!projectId) return null;
@@ -255,37 +333,41 @@ export default function FloatingChatWidget() {
               </div>
             ) : (
               <div className="space-y-3">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.messageNo}
-                    className={`flex ${
-                      msg.userId === currentUser?.userId
-                        ? 'justify-end'
-                        : 'justify-start'
-                    }`}
-                  >
+                {messages.length === 0 ? (
+                  <div className="text-center text-gray-500 text-sm mt-8">
+                    아직 메시지가 없습니다.
+                    <br />첫 번째 메시지를 보내보세요!
+                  </div>
+                ) : (
+                  messages.map((msg) => (
                     <div
-                      className={`max-w-[70%] px-3 py-2 rounded-lg text-sm ${
+                      key={msg.messageNo}
+                      className={`flex ${
                         msg.userId === currentUser?.userId
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
+                          ? 'justify-end'
+                          : 'justify-start'
                       }`}
                     >
-                      {msg.userId !== currentUser?.userId && (
-                        <div className="text-xs opacity-70 mb-1">
-                          {msg.userId}
+                      <div
+                        className={`max-w-[70%] px-3 py-2 rounded-lg text-sm ${
+                          msg.userId === currentUser?.userId
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-900'
+                        }`}
+                      >
+                        {msg.userId !== currentUser?.userId && (
+                          <div className="text-xs opacity-70 mb-1">
+                            {msg.userId}
+                          </div>
+                        )}
+                        <div>{msg.message}</div>
+                        <div className="text-xs opacity-70 mt-1">
+                          {formatMessageTime(msg.createDate)}
                         </div>
-                      )}
-                      <div>{msg.message}</div>
-                      <div className="text-xs opacity-70 mt-1">
-                        {new Date(msg.createDate).toLocaleTimeString('ko-KR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -299,16 +381,21 @@ export default function FloatingChatWidget() {
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="메시지를 입력하세요..."
                 className="flex-1"
-                disabled={loading}
+                disabled={loading || !isConnected}
               />
               <Button
                 type="submit"
                 size="sm"
-                disabled={!message.trim() || loading}
+                disabled={!message.trim() || loading || !isConnected}
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+            {!isConnected && (
+              <div className="text-xs text-red-500 mt-1">
+                연결이 끊어졌습니다. 재연결 중...
+              </div>
+            )}
           </form>
         </div>
       )}
