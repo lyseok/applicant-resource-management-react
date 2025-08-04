@@ -25,11 +25,14 @@ export default function FloatingChatWidget() {
     (state) => state.chat
   );
   const { currentUser } = useSelector((state) => state.auth);
-  const { currentProject } = useSelector((state) => state.project);
+  const { currentProject, projectMembers } = useSelector(
+    (state) => state.project
+  );
 
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [stompClient, setStompClient] = useState(null);
+  const [userNames, setUserNames] = useState({}); // 사용자 ID -> 이름 매핑
   const messagesEndRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
@@ -61,6 +64,121 @@ export default function FloatingChatWidget() {
     }
   };
 
+  // 프로젝트 멤버에서 사용자 이름 찾기
+  const getUserNameFromProjectMembers = (userId) => {
+    if (projectMembers && Array.isArray(projectMembers)) {
+      const member = projectMembers.find((member) => member.userId === userId);
+      return member?.userName || member?.name || null;
+    }
+    return null;
+  };
+
+  // 사용자 이름 가져오기 함수 (API 호출)
+  const fetchUserName = async (userId) => {
+    if (userNames[userId]) {
+      return userNames[userId];
+    }
+
+    // 먼저 프로젝트 멤버에서 찾기
+    const memberName = getUserNameFromProjectMembers(userId);
+    if (memberName) {
+      setUserNames((prev) => ({
+        ...prev,
+        [userId]: memberName,
+      }));
+      return memberName;
+    }
+
+    try {
+      // API 호출로 사용자 정보 가져오기
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          // 인증 토큰이 있다면 추가
+          ...(localStorage.getItem('token') && {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          }),
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        const userName =
+          userData.userName || userData.name || userData.userNm || userId;
+
+        // 사용자 이름 캐시에 저장
+        setUserNames((prev) => ({
+          ...prev,
+          [userId]: userName,
+        }));
+
+        console.log(`사용자 이름 로드 완료: ${userId} -> ${userName}`);
+        return userName;
+      } else {
+        console.warn(
+          `사용자 정보를 가져올 수 없습니다: ${userId}, Status: ${response.status}`
+        );
+        // fallback으로 userId 사용
+        setUserNames((prev) => ({
+          ...prev,
+          [userId]: userId,
+        }));
+        return userId;
+      }
+    } catch (error) {
+      console.error('사용자 정보 가져오기 실패:', error);
+      // fallback으로 userId 사용
+      setUserNames((prev) => ({
+        ...prev,
+        [userId]: userId,
+      }));
+      return userId;
+    }
+  };
+
+  // 사용자 이름 표시 함수
+  const getUserDisplayName = (userId) => {
+    if (userId === currentUser?.userId) {
+      return (
+        currentUser?.userName ||
+        currentUser?.name ||
+        currentUser?.userNm ||
+        userId
+      );
+    }
+
+    // 캐시된 이름이 있으면 사용
+    if (userNames[userId]) {
+      return userNames[userId];
+    }
+
+    // 프로젝트 멤버에서 찾기
+    const memberName = getUserNameFromProjectMembers(userId);
+    if (memberName) {
+      return memberName;
+    }
+
+    return userId; // fallback
+  };
+
+  // 메시지에서 사용자 이름들 미리 로드
+  const preloadUserNames = async (messages) => {
+    const uniqueUserIds = [...new Set(messages.map((msg) => msg.userId))];
+    const missingUserIds = uniqueUserIds.filter(
+      (userId) =>
+        userId !== currentUser?.userId &&
+        !userNames[userId] &&
+        !getUserNameFromProjectMembers(userId)
+    );
+
+    if (missingUserIds.length > 0) {
+      console.log('사용자 이름 로딩 중:', missingUserIds);
+      const promises = missingUserIds.map((userId) => fetchUserName(userId));
+      await Promise.allSettled(promises); // 일부 실패해도 계속 진행
+    }
+  };
+
   // 메시지 스크롤 자동 이동
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -80,6 +198,30 @@ export default function FloatingChatWidget() {
     }
   }, [dispatch, chatroom]);
 
+  // 메시지가 로드되면 사용자 이름들 미리 로드
+  useEffect(() => {
+    if (messages.length > 0) {
+      preloadUserNames(messages);
+    }
+  }, [messages, projectMembers]);
+
+  // 프로젝트 멤버 정보가 로드되면 사용자 이름 매핑 업데이트
+  useEffect(() => {
+    if (projectMembers && Array.isArray(projectMembers)) {
+      const memberNames = {};
+      projectMembers.forEach((member) => {
+        if (member.userId && (member.userName || member.name)) {
+          memberNames[member.userId] = member.userName || member.name;
+        }
+      });
+
+      setUserNames((prev) => ({
+        ...prev,
+        ...memberNames,
+      }));
+    }
+  }, [projectMembers]);
+
   // WebSocket 연결
   const connectWebSocket = async () => {
     if (!chatroom?.chatroomNo || !currentUser?.userId) return;
@@ -94,7 +236,7 @@ export default function FloatingChatWidget() {
       const SockJS = SockJSModule.default || SockJSModule;
       const { Client } = StompModule;
 
-      const socket = new SockJS('http://localhost:80/ws');
+      const socket = new SockJS('http://192.168.34.70:80/ws');
       const client = new Client({
         webSocketFactory: () => socket,
         debug: (str) => console.log('STOMP Debug:', str),
@@ -108,38 +250,50 @@ export default function FloatingChatWidget() {
         dispatch(setConnectionStatus(true));
 
         // 채팅방 구독
-        client.subscribe(`/sub/chat.room.${chatroom.chatroomNo}`, (message) => {
-          try {
-            const receivedMessage = JSON.parse(message.body);
-            console.log('메시지 수신:', receivedMessage);
+        client.subscribe(
+          `/sub/chat.room.${chatroom.chatroomNo}`,
+          async (message) => {
+            try {
+              const receivedMessage = JSON.parse(message.body);
+              console.log('메시지 수신:', receivedMessage);
 
-            // 메시지에 createDate가 없거나 유효하지 않으면 현재 시간으로 설정
-            if (
-              !receivedMessage.createDate ||
-              receivedMessage.createDate === null
-            ) {
-              receivedMessage.createDate = new Date().toISOString();
-              console.log(
-                'createDate가 없어서 현재 시간으로 설정:',
-                receivedMessage.createDate
-              );
+              // 메시지에 createDate가 없거나 유효하지 않으면 현재 시간으로 설정
+              if (
+                !receivedMessage.createDate ||
+                receivedMessage.createDate === null
+              ) {
+                receivedMessage.createDate = new Date().toISOString();
+                console.log(
+                  'createDate가 없어서 현재 시간으로 설정:',
+                  receivedMessage.createDate
+                );
+              }
+
+              // 시간 형식 검증 및 수정
+              const testDate = new Date(receivedMessage.createDate);
+              if (isNaN(testDate.getTime())) {
+                receivedMessage.createDate = new Date().toISOString();
+                console.log(
+                  '유효하지 않은 createDate, 현재 시간으로 설정:',
+                  receivedMessage.createDate
+                );
+              }
+
+              // 새로운 사용자의 이름 미리 로드
+              if (
+                receivedMessage.userId !== currentUser?.userId &&
+                !userNames[receivedMessage.userId] &&
+                !getUserNameFromProjectMembers(receivedMessage.userId)
+              ) {
+                await fetchUserName(receivedMessage.userId);
+              }
+
+              dispatch(messageReceived(receivedMessage));
+            } catch (error) {
+              console.error('메시지 파싱 오류:', error);
             }
-
-            // 시간 형식 검증 및 수정
-            const testDate = new Date(receivedMessage.createDate);
-            if (isNaN(testDate.getTime())) {
-              receivedMessage.createDate = new Date().toISOString();
-              console.log(
-                '유효하지 않은 createDate, 현재 시간으로 설정:',
-                receivedMessage.createDate
-              );
-            }
-
-            dispatch(messageReceived(receivedMessage));
-          } catch (error) {
-            console.error('메시지 파싱 오류:', error);
           }
-        });
+        );
       };
 
       client.onDisconnect = () => {
@@ -357,7 +511,7 @@ export default function FloatingChatWidget() {
                       >
                         {msg.userId !== currentUser?.userId && (
                           <div className="text-xs opacity-70 mb-1">
-                            {msg.userId}
+                            {getUserDisplayName(msg.userId)}
                           </div>
                         )}
                         <div>{msg.message}</div>

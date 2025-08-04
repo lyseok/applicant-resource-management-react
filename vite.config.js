@@ -22,11 +22,11 @@ export default function ({ command }) {
       host: true,
       proxy: {
         '/api': {
-          target: 'http://localhost:80',
+          target: 'http://192.168.34.70:80',
           changeOrigin: true,
         },
         '/ws-stomp': {
-          target: 'http://localhost:80',
+          target: 'http://192.168.34.70:80',
           changeOrigin: true,
           ws: true,
         },
