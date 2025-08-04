@@ -53,12 +53,12 @@ export default function Header() {
 
   const handleMyPage = () => {
     console.log('마이페이지');
-    location.href = 'http://192.168.34.70/mypage';
+    location.href = 'http://localhost/mypage';
   };
 
   const handleGoToDditJob = () => {
     console.log('띹잡 돌아가기');
-    location.href = 'http://192.168.34.70/';
+    location.href = 'http://localhost/';
   };
 
   // 사용자 이름의 첫 글자 추출
