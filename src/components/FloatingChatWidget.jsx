@@ -236,7 +236,7 @@ export default function FloatingChatWidget() {
       const SockJS = SockJSModule.default || SockJSModule;
       const { Client } = StompModule;
 
-      const socket = new SockJS('http://localhost:80/ws');
+      const socket = new SockJS('http://192.168.34.70:80/ws');
       const client = new Client({
         webSocketFactory: () => socket,
         debug: (str) => console.log('STOMP Debug:', str),
