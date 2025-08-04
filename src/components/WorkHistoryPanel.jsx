@@ -55,7 +55,7 @@ const WorkHistoryPanel = ({ projectId }) => {
 
     try {
       const response = await fetch(
-        `http://192.168.34.70/api/projects/${projectId}/work-history`,
+        `http://localhost/api/projects/${projectId}/work-history`,
         {
           method: 'GET',
           headers: {
